@@ -69,6 +69,10 @@ private object IdlParser extends RegexParsers {
 
   def filePath = "[^\"]*".r
 
+  def fileParent(): String = {
+    if (fileStack.top.getParent() != null) fileStack.top.getParent() + "/" else ""
+  }
+
   def directive = importDirective | externDirective
   def importDirective = "import".r
   def externDirective = "extern".r
