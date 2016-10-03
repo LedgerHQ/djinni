@@ -275,6 +275,7 @@ object Main {
       // Debug opt
       opt[Boolean]("trace").valueName("<enable>").foreach(x => traceMethodsCalls = x)
         .text("If true, CPP calls will be printed on standard output")
+        .text("The javascript object hierarchy (inserted in root object by default)")
       note("\nIdentifier styles (ex: \"FooBar\", \"fooBar\", \"foo_bar\", \"FOO_BAR\", \"m_fooBar\")\n")
       identStyle("ident-java-enum",      c => { javaIdentStyle = javaIdentStyle.copy(enum = c) })
       identStyle("ident-java-field",     c => { javaIdentStyle = javaIdentStyle.copy(field = c) })

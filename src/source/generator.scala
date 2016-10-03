@@ -18,10 +18,13 @@ package djinni
 
 import djinni.ast._
 import java.io._
+
 import djinni.generatorTools._
 import djinni.meta._
 import djinni.syntax.Error
 import djinni.writer.IndentWriter
+import djnni.SwiftGenerator
+
 import scala.language.implicitConversions
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -129,6 +132,7 @@ package object generatorTools {
   case class JavascriptIdentStyle(ty: IdentConverter, enumType: IdentConverter, typeParam: IdentConverter,
                                   method: IdentConverter, field: IdentConverter, local: IdentConverter,
                                   enum: IdentConverter, const: IdentConverter)
+<<<<<<< HEAD
   case class NodeIdentStyle(ty: IdentConverter, enumType: IdentConverter, typeParam: IdentConverter,
                             method: IdentConverter, field: IdentConverter, local: IdentConverter,
                             enum: IdentConverter, const: IdentConverter)
@@ -302,6 +306,18 @@ package object generatorTools {
           createFolder("YAML", spec.yamlOutFolder.get)
         }
         new YamlGenerator(spec).generate(idl)
+      }
+      if (spec.swiftOutFolder.isDefined) {
+        if (!spec.skipGeneration) {
+          createFolder("Swift", spec.swiftOutFolder.get)
+        }
+        new SwiftGenerator(spec).generate(idl)
+      }
+      if (spec.nodeOutFolder.isDefined) {
+        if (!spec.skipGeneration) {
+          createFolder("NodeJS", spec.nodeOutFolder.get)
+        }
+        new NodeJsGenerator(spec).generate(idl)
       }
       None
     }

@@ -118,6 +118,12 @@ private object IdlParser extends RegexParsers {
         case _ => return err("Invalid modifier \"" + part.name + "\"")
       }
     success(Ext(foundJava, foundCpp, foundObjc, foundSwift, foundNode, foundReactNative))
+          if (foundSwift) return err("Found multiple \"s\" modifiers")
+          foundNode = true
+        }
+        case _ => return err("Invalid modifier \"" + part.name + "\"")
+      }
+    success(Ext(foundJava, foundCpp, foundObjc, foundSwift, foundNode))
   }
 
   def typeDef: Parser[TypeDef] = record | enum | flags | interface
