@@ -3,8 +3,11 @@ import djinni.{Generator, SwiftMarshal, writer}
 import djinni.ast.{Enum, _}
 import djinni.generatorTools.Spec
 import djinni.meta._
+<<<<<<< HEAD
 import java.nio.file.Path;
 import java.nio.file.Paths;
+=======
+>>>>>>> Add swift generation
 
 /**
   *
@@ -102,6 +105,38 @@ class SwiftGenerator(spec: Spec) extends Generator(spec) {
             } else {
               w.wl(s"self.$varName?($vars)")
             }
+<<<<<<< HEAD
+=======
+
+          }
+        }
+      }
+    })
+  }
+
+  /*
+  import Foundation
+
+final class Callback: NSObject, LGMyObjectCallback {
+
+    private var onChanged: ((String) -> Void)?
+
+    func callback1(_ block: @escaping (String) -> Void) -> Callback {
+        self.callback1 = block
+        return self
+    }
+
+    func onChanged(test: String) {
+        self.callback1?(test)
+    }
+
+}
+   */
+
+  override def generateRecord(origin: String, ident: Ident, doc: Doc, params: Seq[TypeParam], r: Record): Unit = {
+    // NOOP
+  }
+>>>>>>> Add swift generation
 
           }
         }
