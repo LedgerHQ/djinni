@@ -3,11 +3,8 @@ import djinni.{Generator, SwiftMarshal, writer}
 import djinni.ast.{Enum, _}
 import djinni.generatorTools.Spec
 import djinni.meta._
-<<<<<<< HEAD
 import java.nio.file.Path;
 import java.nio.file.Paths;
-=======
->>>>>>> Add swift generation
 
 /**
   *
