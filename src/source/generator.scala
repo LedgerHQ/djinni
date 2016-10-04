@@ -83,7 +83,16 @@ package object generatorTools {
                    skipGeneration: Boolean,
                    yamlOutFolder: Option[File],
                    yamlOutFile: Option[String],
+<<<<<<< HEAD
                    yamlPrefix: String)
+=======
+                   yamlPrefix: String,
+                   swiftOutFolder: Option[File],
+                   swiftTypePrefix: String,
+                   swiftUmbrellaHeaderFilename: String,
+                   nodeOutFolder: Option[File],
+                   nodePackage: String)
+>>>>>>> Add umbrella header generation
 
   def preComma(s: String) = {
     if (s.isEmpty) s else ", " + s
