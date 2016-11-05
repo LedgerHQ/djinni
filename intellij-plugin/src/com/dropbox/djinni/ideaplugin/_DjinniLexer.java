@@ -320,7 +320,7 @@ public class _DjinniLexer implements FlexLexer {
   private static final int ZZ_PUSHBACK_2BIG = 2;
 
   /* error messages for the codes above */
-  private static final String[] ZZ_ERROR_MSG = {
+  private static final String ZZ_ERROR_MSG[] = {
     "Unknown internal scanner error",
     "Error: could not match input",
     "Error: pushback value was too large"
