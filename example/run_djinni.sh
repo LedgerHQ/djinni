@@ -78,9 +78,7 @@ fi
     --node-include-cpp "../cpp" \
     --node-package ledgerapp_nodejs \
     \
-    --idl "$in" \
-    --idl-include-path "../../" \
-    --idl-include-path "path/to/idl"
+    --idl "$in"
 
 # Copy changes from "$temp_output" to final dir.
 
