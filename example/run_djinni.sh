@@ -84,9 +84,7 @@ fi
     --react-include-objc-impl "../../handwritten-src/objc" \
     --react-native-objc-impl-suffix "Impl" \
     \
-    --idl "$in" \
-    --idl-include-path "../../" \
-    --idl-include-path "path/to/idl"
+    --idl "$in"
 
 # Copy changes from "$temp_output" to final dir.
 
