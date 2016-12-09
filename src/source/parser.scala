@@ -62,7 +62,7 @@ private object IdlParser extends RegexParsers {
       exists
     })
 
-    if (file.isEmpty) throw new FileNotFoundException("Unable to find file \"" + fileName + "\" at " + fileStack.top.getCanonicalPath)
+    if (path.isEmpty || file.isEmpty) throw new FileNotFoundException("Unable to find file \"" + fileName + "\" at " + fileStack.top.getCanonicalPath)
 
     return file.get
   }
