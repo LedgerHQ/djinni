@@ -62,16 +62,12 @@ private object IdlParser extends RegexParsers {
       exists
     })
 
-    if (path.isEmpty || file.isEmpty) throw new FileNotFoundException("Unable to find file \"" + fileName + "\" at " + fileStack.top.getCanonicalPath)
+    if (file.isEmpty) throw new FileNotFoundException("Unable to find file \"" + fileName + "\" at " + fileStack.top.getCanonicalPath)
 
     return file.get
   }
 
   def filePath = "[^\"]*".r
-
-  def fileParent(): String = {
-    if (fileStack.top.getParent() != null) fileStack.top.getParent() + "/" else ""
-  }
 
   def directive = importDirective | externDirective
   def importDirective = "import".r
