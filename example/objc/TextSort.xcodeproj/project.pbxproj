@@ -40,6 +40,7 @@
 		65D7FDF819AD0CDF0038F82F /* TXSViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TXSViewController.h; sourceTree = "<group>"; };
 		65D7FDF919AD0CDF0038F82F /* TXSViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TXSViewController.m; sourceTree = "<group>"; };
 		A546A26D1E72FBAF004A8BBD /* TXSTextboxListenerDebugableImpl.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TXSTextboxListenerDebugableImpl.swift; path = "../handwritten-src/swift/TXSTextboxListenerDebugableImpl.swift"; sourceTree = "<group>"; };
+		A546A26D1E72FBAF004A8BBD /* TXSTextboxListenerImpl.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TXSTextboxListenerImpl.swift; path = "../handwritten-src/swift/TXSTextboxListenerImpl.swift"; sourceTree = "<group>"; };
 		B003051819B70561008E1F67 /* libdjinni_objc.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libdjinni_objc.a; path = "../../support-lib/build/Debug-iphoneos/libdjinni_objc.a"; sourceTree = "<group>"; };
 		B097B6BB19B1C07E0047653A /* libtextsort_objc.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtextsort_objc.a; path = "../../build/Debug-iphoneos/libtextsort_objc.a"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -130,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				A546A26D1E72FBAF004A8BBD /* TXSTextboxListenerDebugableImpl.swift */,
+				A546A26D1E72FBAF004A8BBD /* TXSTextboxListenerImpl.swift */,
 			);
 			name = "handwritten-swift";
 			sourceTree = "<group>";
@@ -209,6 +211,7 @@
 				65D7FDFB19AD0CDF0038F82F /* TXSAppDelegate.m in Sources */,
 				65D7FDFD19AD0CDF0038F82F /* TXSViewController.m in Sources */,
 				A546A26E1E72FBAF004A8BBD /* TXSTextboxListenerDebugableImpl.swift in Sources */,
+				A546A26E1E72FBAF004A8BBD /* TXSTextboxListenerImpl.swift in Sources */,
 				65D7FDFA19AD0CDF0038F82F /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
