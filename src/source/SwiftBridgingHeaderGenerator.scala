@@ -38,7 +38,7 @@ class SwiftBridgingHeaderGenerator(spec: Spec) extends Generator(spec) {
 }
 
 object SwiftBridgingHeaderGenerator {
-  
+
   val bridgingHeaderName = (s: String) => s.split('-').mkString("_")
   val bridgingHeaderVariables = (s: String) => s.split('-').mkString("")
 

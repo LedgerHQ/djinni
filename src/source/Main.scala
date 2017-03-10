@@ -72,7 +72,11 @@ object Main {
     var objcTypePrefix: String = ""
     var objcIncludePrefix: String = ""
     var objcExtendedRecordIncludePrefix: String = ""
+<<<<<<< HEAD
     var objcSwiftBridgingHeaderName: Option[String] = None
+=======
+    var objcSwiftBridgingHeaderOut: Option[File] = None
+>>>>>>> Generate bridging header for Swift
     var objcppIncludePrefix: String = ""
     var objcppIncludeCppPrefix: String = ""
     var objcppIncludeObjcPrefixOptional: Option[String] = None
@@ -185,8 +189,13 @@ object Main {
         .text("The prefix for Objective-C data types (usually two or three letters)")
       opt[String]("objc-include-prefix").valueName("<prefix>").foreach(objcIncludePrefix = _)
         .text("The prefix for #import of header files from Objective-C files.")
+<<<<<<< HEAD
       opt[String]("objc-swift-bridging-header").valueName("<name>").foreach(x => objcSwiftBridgingHeaderName = Some(x))
         .text("The name of Objective-C Bridging Header used in XCode's Swift projects.")
+=======
+      opt[File]("objc-swift-bridging-header-out").valueName("<path>").foreach(x => objcSwiftBridgingHeaderOut = Some(x))
+        .text("The path to Objective-C Bridging Header used in XCode's Swift projects.")
+>>>>>>> Generate bridging header for Swift
       note("")
       opt[File]("objcpp-out").valueName("<out-folder>").foreach(x => objcppOutFolder = Some(x))
         .text("The output folder for private Objective-C++ files (Generator disabled if unspecified).")
@@ -339,6 +348,7 @@ object Main {
           None
         }
 
+<<<<<<< HEAD
         val objcSwiftBridgingHeaderWriter = if (objcSwiftBridgingHeader.isDefined && objcOutFolder.isDefined) {
           val objcSwiftBridgingHeaderFile = new File(objcOutFolder.get.getPath, objcSwiftBridgingHeader.get + ".h")
           if (objcSwiftBridgingHeaderFile.getParentFile != null)
@@ -427,6 +437,98 @@ object Main {
       case Failure(ex) =>
         System.err.println(ex)
         System.exit(1); return
+=======
+    System.out.println("Generating...")
+    val outFileListWriter = if (outFileListPath.isDefined) {
+      if (outFileListPath.get.getParentFile != null)
+        createFolder("output file list", outFileListPath.get.getParentFile)
+      Some(new BufferedWriter(new FileWriter(outFileListPath.get)))
+    } else {
+      None
+    }
+    val objcSwiftBridgingHeaderWriter = if (objcSwiftBridgingHeaderOut.isDefined) {
+      if (objcSwiftBridgingHeaderOut.get.getParentFile != null)
+        createFolder("Swift", objcSwiftBridgingHeaderOut.get.getParentFile)
+      val writer = new BufferedWriter(new FileWriter(objcSwiftBridgingHeaderOut.get))
+      SwiftBridgingHeaderGenerator.writeAutogenerationWarning(writer)
+      Some(writer)
+    } else {
+      None
+    }
+
+    val outSpec = Spec(
+      javaOutFolder,
+      javaPackage,
+      javaClassAccessModifier,
+      javaIdentStyle,
+      javaCppException,
+      javaAnnotation,
+      javaNullableAnnotation,
+      javaNonnullAnnotation,
+      javaUseFinalForRecord,
+      cppOutFolder,
+      cppHeaderOutFolder,
+      cppIncludePrefix,
+      cppExtendedRecordIncludePrefix,
+      cppNamespace,
+      cppIdentStyle,
+      cppFileIdentStyle,
+      cppOptionalTemplate,
+      cppOptionalHeader,
+      cppEnumHashWorkaround,
+      cppNnHeader,
+      cppNnType,
+      cppNnCheckExpression,
+      cppUseWideStrings,
+      jniOutFolder,
+      jniHeaderOutFolder,
+      jniIncludePrefix,
+      jniIncludeCppPrefix,
+      jniNamespace,
+      jniClassIdentStyle,
+      jniFileIdentStyle,
+      jniBaseLibIncludePrefix,
+      cppExt,
+      cppHeaderExt,
+      objcOutFolder,
+      objcppOutFolder,
+      objcIdentStyle,
+      objcFileIdentStyle,
+      objcppExt,
+      objcHeaderExt,
+      objcIncludePrefix,
+      objcExtendedRecordIncludePrefix,
+      objcppIncludePrefix,
+      objcppIncludeCppPrefix,
+      objcppIncludeObjcPrefix,
+      objcppNamespace,
+      objcBaseLibIncludePrefix,
+      objcSwiftBridgingHeaderWriter,
+      outFileListWriter,
+      skipGeneration,
+      yamlOutFolder,
+      yamlOutFile,
+      yamlPrefix,
+      swiftOutFolder,
+      swiftTypePrefix,
+      swiftUmbrellaHeaderFilename,
+      nodeOutFolder,
+      nodePackage
+    )
+
+
+    try {
+      val r = generate(idl, outSpec)
+      r.foreach(e => System.err.println("Error generating output: " + e))
+    }
+    finally {
+      if (outFileListWriter.isDefined) {
+        outFileListWriter.get.close()
+      }
+      if (objcSwiftBridgingHeaderWriter.isDefined) {
+        objcSwiftBridgingHeaderWriter.get.close()
+      }
+>>>>>>> Generate bridging header for Swift
     }
   }
 }
