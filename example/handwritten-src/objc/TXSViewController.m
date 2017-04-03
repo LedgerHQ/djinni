@@ -5,7 +5,7 @@
 #import "TXSViewController.h"
 #import "TextSort-Swift.h"
 #import "TXSViewController.h"
-#import "TXSTextboxListener.h"
+#import "TextSort-Swift.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -22,6 +22,7 @@
 @implementation TXSViewController {
     TXSSortItems* _sortItemInterface;
     id <TXSTextboxListener> _textboxListener;
+    id <TXSTextboxResetListener> _textboxResetListener;
 }
 
 - (void)viewDidLoad

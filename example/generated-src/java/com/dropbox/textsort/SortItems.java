@@ -57,13 +57,11 @@ import javax.annotation.Nonnull;
         }
         private native void native_sort(long _nativeRef, SortOrder order, ItemList items);
 
-<<<<<<< HEAD
         @CheckForNull
         public static native SortItems createWithListener(@CheckForNull TextboxListener listener);
 
         @Nonnull
         public static native ItemList runSort(@Nonnull ItemList items);
-=======
         @Override
         public int count()
         {
@@ -71,6 +69,5 @@ import javax.annotation.Nonnull;
             return native_count(this.nativeRef);
         }
         private native int native_count(long _nativeRef);
->>>>>>> start adding react generation
     }
 }
