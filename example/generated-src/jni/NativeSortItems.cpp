@@ -6,7 +6,6 @@
 #include "NativeItemList.hpp"
 #include "NativeSortOrder.hpp"
 #include "NativeTextboxListener.hpp"
-#include "NativeTextboxResetListener.hpp"
 
 namespace djinni_generated {
 
@@ -33,12 +32,15 @@ CJNIEXPORT void JNICALL Java_com_dropbox_textsort_SortItems_00024CppProxy_native
     } JNI_TRANSLATE_EXCEPTIONS_RETURN(jniEnv, )
 }
 
+<<<<<<< HEAD
 CJNIEXPORT jobject JNICALL Java_com_dropbox_textsort_SortItems_00024CppProxy_createWithListener(JNIEnv* jniEnv, jobject /*this*/, jobject j_listener)
+=======
+CJNIEXPORT jobject JNICALL Java_com_dropbox_textsort_SortItems_createWithListener(JNIEnv* jniEnv, jobject /*this*/, jobject j_listener)
+>>>>>>> Revert "Update example to include a swift and objc listener"
 {
     try {
         DJINNI_FUNCTION_PROLOGUE0(jniEnv);
-        auto r = ::textsort::SortItems::create_with_listener(::djinni_generated::NativeTextboxListener::toCpp(jniEnv, j_listener),
-                                                             ::djinni_generated::NativeTextboxResetListener::toCpp(jniEnv, j_resetListener));
+        auto r = ::textsort::SortItems::create_with_listener(::djinni_generated::NativeTextboxListener::toCpp(jniEnv, j_listener));
         return ::djinni::release(::djinni_generated::NativeSortItems::fromCpp(jniEnv, r));
     } JNI_TRANSLATE_EXCEPTIONS_RETURN(jniEnv, 0 /* value doesn't matter */)
 }

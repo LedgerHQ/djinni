@@ -11,6 +11,7 @@ import javax.annotation.Nonnull;
     /** For the iOS / Android demo */
     public void sort(@Nonnull SortOrder order, @Nonnull ItemList items);
 
+<<<<<<< HEAD
     public abstract int count();
 
     @CheckForNull
@@ -18,6 +19,10 @@ import javax.annotation.Nonnull;
     {
         return CppProxy.createWithListener(listener);
     }
+=======
+    @CheckForNull
+    public static native SortItems createWithListener(@CheckForNull TextboxListener listener);
+>>>>>>> Revert "Update example to include a swift and objc listener"
 
     /** For the localhost / command-line demo */
     @Nonnull
@@ -56,6 +61,7 @@ import javax.annotation.Nonnull;
             native_sort(this.nativeRef, order, items);
         }
         private native void native_sort(long _nativeRef, SortOrder order, ItemList items);
+<<<<<<< HEAD
 
         @CheckForNull
         public static native SortItems createWithListener(@CheckForNull TextboxListener listener);
@@ -69,5 +75,7 @@ import javax.annotation.Nonnull;
             return native_count(this.nativeRef);
         }
         private native int native_count(long _nativeRef);
+=======
+>>>>>>> Revert "Update example to include a swift and objc listener"
     }
 }
