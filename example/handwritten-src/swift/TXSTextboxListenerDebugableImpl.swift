@@ -1,21 +1,24 @@
+//
+//  TXSTextboxListenerImpl.swift
+//  TextSort
+//
+//  Created by Bruno Coelho on 10/03/2017.
+//  Copyright © 2017 Dropbox, Inc. All rights reserved.
+//
+
 import UIKit
 
-final class TXSTextboxListenerDebugableImpl : NSObject, TXSTextboxListener {
-    private var textView: UITextView
-    
-    @available(*, unavailable)
-    override init() {
-        fatalError("Unsupported")
-    }
+@objc class TXSTextboxListenerDebugableImpl : NSObject, TXSTextboxListener {
+    private var textView_: UITextView
     
     @objc(initWithUITextView:)
-    init(textView: UITextView) {
-        self.textView = textView
+    init (textView: UITextView) {
+        textView_ = textView
     }
     
-    func update(_ items: TXSItemList) {
+    @objc func update(_ items: TXSItemList) {
         let string = items.items.joined(separator: "\n")
         print("TXSTextboxListenerDebugableImpl -> update \n\(string)")
-        textView.text = string
+        textView_.text = string
     }
 }

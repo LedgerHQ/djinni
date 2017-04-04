@@ -1,17 +1,14 @@
 #import "TXSItemList.h"
 #import "TXSSortItems.h"
-<<<<<<< HEAD
 #import "TextSort-Swift.h"
 #import "TXSTextboxListenerImpl.h"
 #import "TXSViewController.h"
 #import "TextSort-Swift.h"
 #import "TXSViewController.h"
 #import "TextSort-Swift.h"
-=======
 #import "TextSort-Swift.h"
 #import "TXSViewController.h"
 #import "TXSTextboxListener.h"
->>>>>>> Revert "Update example to include a swift and objc listener"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -44,7 +41,6 @@
                                    action:@selector(dismissKeyboard)];
     [self.view addGestureRecognizer:tap];
 
-<<<<<<< HEAD
     [self createSorter];
 }
 
@@ -65,11 +61,14 @@
 -(IBAction)toggleDebugMode:(id)sender
 {
     [self createSorter];
-=======
     // Create the Objective-C TXSTextboxListener
     _textboxListener = [[TXSTextboxListenerImpl alloc] initWithUITextView:self.textView];
     _sortItemInterface = [TXSSortItems createWithListener:_textboxListener];
->>>>>>> Revert "Update example to include a swift and objc listener"
+}
+
+-(IBAction)toggleDebugMode:(id)sender
+{
+    [self createSorter];
 }
 
 - (IBAction)sort:(id)sender
