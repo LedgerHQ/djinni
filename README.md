@@ -534,9 +534,6 @@ In order to do that, there are two steps needed:
 - Iulia Tamas
 - Andrew Twyman
 
-## Contributors
-- Google Inc.
-
 ## Contacts
 - Xianwen Chen - `xianwen@dropbox.com`
 - Andrew Twyman - `atwyman@dropbox.com`
