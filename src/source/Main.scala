@@ -350,6 +350,7 @@ object Main {
           None
         }
 
+
         val outSpec = Spec(
           javaOutFolder,
           javaPackage,
