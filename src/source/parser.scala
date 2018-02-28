@@ -100,6 +100,14 @@ private object IdlParser extends RegexParsers {
           if (foundObjc) return err("Found multiple \"o\" modifiers.")
           foundObjc = true
         }
+        case "s" => {
+          if (foundSwift) return err("Found multiple \"s\" modifiers")
+          foundSwift = true
+        }
+        case "n" => {
+          if (foundNode) return err("Found multiple \"n\" modifiers")
+          foundNode = true
+        }
         case _ => return err("Invalid modifier \"" + part.name + "\"")
       }
     success(Ext(foundJava, foundCpp, foundObjc))
@@ -149,20 +157,38 @@ private object IdlParser extends RegexParsers {
     case doc~ident~Some("none") => Enum.Option(ident, doc, Some(Enum.SpecialFlag.NoFlags))
   }
 
-  def interfaceHeader = "interface" ~> extInterface
+  def interfaceHeader = "interface" ~> (genericType ~ extInterface)
   def interface: Parser[Interface] = interfaceHeader ~ bracesList(method | const) ^^ {
     case ext~items => {
       val methods = items collect {case m: Method => m}
       val consts = items collect {case c: Const => c}
-      Interface(ext, methods, consts)
+      Interface(ext._2, methods, consts, ext._1)
     }
+  }
+
+  def genericTypeIdentifier: Parser[Seq[GenericType]] = {
+    "\\[([A-Za-z]+)\\]".r ^^ {
+      _.toString.replace("[", "").replace("]", "")
+    } map {(r) =>
+      Seq(GenericType(r))
+    }
+  }
+  def noGenericTypeIdentifier = {
+    "".r ^^ {
+      _.toString
+    } map {(_) =>
+      Seq[GenericType]()
+    }
+  }
+  def genericType:Parser[Seq[GenericType]] = {
+    genericTypeIdentifier | noGenericTypeIdentifier
   }
 
   def externTypeDecl: Parser[TypeDef] = externEnum | externFlags | externInterface | externRecord
   def externEnum: Parser[Enum] = enumHeader ^^ { case _ => Enum(List(), false) }
   def externFlags: Parser[Enum] = flagsHeader ^^ { case _ => Enum(List(), true) }
   def externRecord: Parser[Record] = recordHeader ~ opt(deriving) ^^ { case ext~deriving => Record(ext, List(), List(), deriving.getOrElse(Set[DerivingType]())) }
-  def externInterface: Parser[Interface] = interfaceHeader ^^ { case ext => Interface(ext, List(), List()) }
+  def externInterface: Parser[Interface] = interfaceHeader ^^ { case ext => Interface(ext._2, List(), List(), ext._1) }
 
   def staticLabel: Parser[Boolean] = ("static ".r | "".r) ^^ {
     case "static " => true
@@ -299,7 +325,7 @@ def parseExternFile(externFile: File, inFileListWriter: Option[Writer]) : Seq[Ty
 }
 
 def normalizePath(path: File) : File = {
-  return new File(java.nio.file.Paths.get(path.toString()).normalize().toString())
+  new File(java.nio.file.Paths.get(path.toString()).normalize().toString())
 }
 
 def parseFile(idlFile: File, inFileListWriter: Option[Writer]): Seq[TypeDecl] = {
@@ -321,7 +347,7 @@ def parseFile(idlFile: File, inFileListWriter: Option[Writer]): Seq[TypeDecl] = 
         idl.imports.foreach(x => {
           val normalized = normalizePath(x.file)
           if (fileStack.contains(normalized)) {
-            throw new AssertionError("Circular import detected!")
+            throw new AssertionError(s"Circular import detected of file ${normalized} in ${normalizedIdlFile.getName}")
           }
           if (!visitedFiles.contains(normalized)) {
             x match {

@@ -88,7 +88,9 @@ private def resolve(scope: Scope, typeDef: TypeDef) {
   typeDef match {
     case e: Enum => resolveEnum(scope, e)
     case r: Record => resolveRecord(scope, r)
-    case i: Interface => resolveInterface(scope, i)
+    case i: Interface =>
+      if (i.generic.isEmpty)
+        resolveInterface(scope, i)
   }
 }
 

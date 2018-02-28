@@ -61,6 +61,49 @@ class CppGenerator(spec: Spec) extends Generator(spec) {
 
     if (spec.cppEnumHashWorkaround) {
       refs.hpp.add("#include <functional>") // needed for std::hash
+      refs.hpp.add("#include <string>")
+      refs.hpp.add("#include <iostream>")
+    }
+
+
+    writeCppFile(ident, origin, refs.cpp += "#include \"enum_from_string.hpp\"" , w => {
+      val variableName = self(0).toLower + self.slice(1, self.length)
+      w.w(s"std::string to_string(const $self& $variableName)").bracedSemi {
+        w.w(s"switch ($variableName)").bracedSemi {
+          for (o <- e.options) {
+            w.wl(s"case $self::${idCpp.enum(o.ident.name)}: return ${'"' + idCpp.enum(o.ident.name) + '"'};")
+          }
+        }
+      }
+      w.wl("template <>")
+      w.w(s"$self from_string(const std::string& $variableName)").bracedSemi {
+        for (o <- e.options) {
+          if (e.options.head == o)
+            w.wl(s"if ($variableName == ${'"' + idCpp.enum(o.ident.name) + '"'}) return $self::${idCpp.enum(o.ident.name)};")
+          else if (e.options.last == o)
+            w.wl(s"else return $self::${idCpp.enum(o.ident.name)};")
+          else
+            w.wl(s"else if ($variableName == ${'"' + idCpp.enum(o.ident.name) + '"'}) return $self::${idCpp.enum(o.ident.name)};")
+        }
+      }
+      // Dump method
+      w.wl
+      w.wl(s"std::ostream &operator<<(std::ostream &os, const $self &o)").braced {
+        w.w("switch (o)") braced {
+          for (o <- e.options) {
+            w.wl(s"case $self::${idCpp.enum(o.ident.name)}:  return os << ${'"' + idCpp.enum(o.ident.name) + '"'};")
+          }
+        }
+      }
+    })
+
+    try {
+      writeHppFile("enum_from_string", origin, mutable.TreeSet("#include <string>"), mutable.TreeSet(), w => {
+        w.wl("template <typename T> ")
+        w.wl("T from_string(const std::string&);")
+      })
+    } catch {
+      case all: Throwable => // mute
     }
 
     val flagsType = "unsigned"
@@ -72,6 +115,10 @@ class CppGenerator(spec: Spec) extends Generator(spec) {
         writeEnumOptionNone(w, e, idCpp.enum)
         writeEnumOptions(w, e, idCpp.enum)
         writeEnumOptionAll(w, e, idCpp.enum)
+        val variableName = self(0).toLower + self.slice(1, self.length)
+        w.wl(s"std::string to_string(const $self& $variableName);")
+        w.wl(s"std::ostream &operator<<(std::ostream &os, const $self &o);")
+
       }
 
       if(e.flags) {
@@ -189,7 +236,7 @@ class CppGenerator(spec: Spec) extends Generator(spec) {
     r.fields.foreach(f => refs.find(f.ty, false))
     r.consts.foreach(c => refs.find(c.ty, false))
     refs.hpp.add("#include <utility>") // Add for std::move
-
+    refs.hpp.add("#include <iostream>")
     val self = marshal.typename(ident, r)
     val (cppName, cppFinal) = if (r.ext.cpp) (ident.name + "_base", "") else (ident.name, " final")
     val actualSelf = marshal.typename(cppName, r)
@@ -241,6 +288,55 @@ class CppGenerator(spec: Spec) extends Generator(spec) {
           w.wl(": " + init(r.fields.head))
           r.fields.tail.map(f => ", " + init(f)).foreach(w.wl)
           w.wl("{}")
+        }
+
+        if (r.fields.nonEmpty) {
+          // Copy constructor
+          w.wl
+          w.wl(s"${actualSelf}(const ${actualSelf}& cpy) {")
+          r.fields foreach {(field) =>
+            w wl s"   this->${idCpp.field(field.ident)} = cpy.${idCpp.field(field.ident)};"
+          }
+          w.wl("}")
+
+          // Default constructor
+          w.wl
+          w.wl(s"${actualSelf}() = default;")
+          w.wl
+
+          // Assignement operator
+          w.wl
+          w.wl(s"${actualSelf}& operator=(const ${actualSelf}& cpy) {")
+          r.fields foreach {(field) =>
+            w wl s"   this->${idCpp.field(field.ident)} = cpy.${idCpp.field(field.ident)};"
+          }
+          w.wl("   return *this;")
+          w.wl("}")
+        }
+
+
+        // Cereal load serialization
+        {
+          w.wl
+          w.wl("template <class Archive>")
+          w.w("void load(Archive& archive)").braced {
+            val vars = r.fields map {(field) =>
+              idCpp.field(field.ident)
+            } mkString(", ")
+            w.wl(s"archive($vars);")
+          }
+        }
+
+        // Cereal save serialization
+        {
+          w.wl
+          w.wl("template <class Archive>")
+          w.w("void save(Archive& archive) const").braced {
+            val vars = r.fields map {(field) =>
+              idCpp.field(field.ident)
+            } mkString(", ")
+            w.wl(s"archive($vars);")
+          }
         }
 
         if (r.ext.cpp) {
