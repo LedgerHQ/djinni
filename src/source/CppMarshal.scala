@@ -28,7 +28,8 @@ class CppMarshal(spec: Spec) extends Marshal(spec) {
 
   def paramType(tm: MExpr, scopeSymbols: Seq[String]): String = toCppParamType(tm, None, scopeSymbols)
   def paramType(ty: TypeRef, scopeSymbols: Seq[String]): String = paramType(ty.resolved, scopeSymbols)
-  override def paramType(tm: MExpr): String = toCppParamType(tm)
+  def paramType(tm: MExpr, needRef: Boolean): String = toCppParamType(tm, None, Seq(), needRef)
+  override def paramType(tm: MExpr): String = toCppParamType(tm, None, Seq())
   override def fqParamType(tm: MExpr): String = toCppParamType(tm, Some(spec.cppNamespace))
 
   def returnType(ret: Option[TypeRef], scopeSymbols: Seq[String]): String = {
@@ -135,7 +136,7 @@ class CppMarshal(spec: Spec) extends Marshal(spec) {
   private def toCppType(ty: TypeRef, namespace: Option[String] = None, scopeSymbols: Seq[String] = Seq()): String =
     toCppType(ty.resolved, namespace, scopeSymbols)
 
-  private def toCppType(tm: MExpr, namespace: Option[String], scopeSymbols: Seq[String]): String = {
+  def toCppType(tm: MExpr, namespace: Option[String], scopeSymbols: Seq[String]): String = {
     def withNamespace(name: String): String = {
       // If an unqualified symbol needs to have its namespace added, this code assumes that the
       // namespace is the one that's defined for generated types (spec.cppNamespace).
@@ -227,10 +228,10 @@ class CppMarshal(spec: Spec) extends Marshal(spec) {
   }
 
   // this can be used in c++ generation to know whether a const& should be applied to the parameter or not
-  private def toCppParamType(tm: MExpr, namespace: Option[String] = None, scopeSymbols: Seq[String] = Seq()): String = {
+  private def toCppParamType(tm: MExpr, namespace: Option[String] = None, scopeSymbols: Seq[String] = Seq(), forceValue: Boolean = false): String = {
     val cppType = toCppType(tm, namespace, scopeSymbols)
     val refType = "const " + cppType + " &"
     val valueType = cppType
-    if(byValue(tm)) valueType else refType
+    if(byValue(tm) || forceValue) valueType else refType
   }
 }
