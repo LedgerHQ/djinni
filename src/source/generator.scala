@@ -132,7 +132,6 @@ package object generatorTools {
   case class JavascriptIdentStyle(ty: IdentConverter, enumType: IdentConverter, typeParam: IdentConverter,
                                   method: IdentConverter, field: IdentConverter, local: IdentConverter,
                                   enum: IdentConverter, const: IdentConverter)
-<<<<<<< HEAD
   case class NodeIdentStyle(ty: IdentConverter, enumType: IdentConverter, typeParam: IdentConverter,
                             method: IdentConverter, field: IdentConverter, local: IdentConverter,
                             enum: IdentConverter, const: IdentConverter)
