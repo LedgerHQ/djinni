@@ -36,3 +36,4 @@ intellij-plugin/djinni.jar
 callgrind.out.*
 
 .idea/
+example/generated-src/

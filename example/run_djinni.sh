@@ -22,6 +22,7 @@ in="$base_dir/example.djinni"
 cpp_out="$base_dir/generated-src/cpp"
 jni_out="$base_dir/generated-src/jni"
 objc_out="$base_dir/generated-src/objc"
+nodejs_out="$base_dir/generated-src/nodejs"
 java_out="$base_dir/generated-src/java/com/dropbox/textsort"
 
 java_package="com.dropbox.textsort"
@@ -72,6 +73,11 @@ fi
     --objc-type-prefix TXS \
     --objc-swift-bridging-header "TextSort-Bridging-Header" \
     \
+    --node-out "$temp_out/nodejs" \
+    --node-type-prefix NJS \
+    --node-include-cpp "../cpp" \
+    --node-package ledgerapp_nodejs \
+    \
     --idl "$in"
 
 # Copy changes from "$temp_output" to final dir.
@@ -89,6 +95,7 @@ mirror "cpp" "$temp_out/cpp" "$cpp_out"
 mirror "java" "$temp_out/java" "$java_out"
 mirror "jni" "$temp_out/jni" "$jni_out"
 mirror "objc" "$temp_out/objc" "$objc_out"
+mirror "nodejs" "$temp_out/nodejs" "$nodejs_out"
 
 date > "$gen_stamp"
 
