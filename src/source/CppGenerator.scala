@@ -115,11 +115,10 @@ class CppGenerator(spec: Spec) extends Generator(spec) {
         writeEnumOptionNone(w, e, idCpp.enum)
         writeEnumOptions(w, e, idCpp.enum)
         writeEnumOptionAll(w, e, idCpp.enum)
-        val variableName = self(0).toLower + self.slice(1, self.length)
-        w.wl(s"std::string to_string(const $self& $variableName);")
-        w.wl(s"std::ostream &operator<<(std::ostream &os, const $self &o);")
-
       }
+      val variableName = self(0).toLower + self.slice(1, self.length)
+      w.wl(s"std::string to_string(const $self& $variableName);")
+      w.wl(s"std::ostream &operator<<(std::ostream &os, const $self &o);")
 
       if(e.flags) {
         // Define some operators to make working with "enum class" flags actually practical
