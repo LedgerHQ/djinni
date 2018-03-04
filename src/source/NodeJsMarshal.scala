@@ -281,7 +281,15 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           case i: Interface =>
             wr.wl(s"Local<Object> njs_$converted = $converting->ToObject(context).ToLocalChecked();")
             wr.wl(s"$nodeType *njs_ptr_$converted = static_cast<$nodeType *>(Nan::GetInternalFieldPointer(njs_$converted,0));")
-            wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
+            if(i.ext.cpp){
+              wr.wl(s"if(!njs_ptr_$converted)").braced{
+                val error = s"NodeJs Object to $nodeType failed"
+                wr.wl(s"return Nan::ThrowError($error);")
+              }
+              wr.wl(s"suto $converted = njs_ptr_$converted->getCppImpl();")
+            }else{
+              wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
+            }
             wr.wl
         }
       case e: MExtern => e.defType match {
