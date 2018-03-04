@@ -382,8 +382,8 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
     var addContext = false
 
-    def addContextFromTypeRef(ty: TypeRef): Unit = {
-      ty.resolved.base match {
+      def addContextFromTypeRef(ty: MExpr): Unit = {
+      ty.base match {
         case d: MDef =>
           d.defType match {
             case DInterface => {
@@ -401,15 +401,21 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             }
             case _ =>
           }
+        case MList | MSet => addContextFromTypeRef(ty.args(0))
+        case MMap =>
+          addContextFromTypeRef(ty.args(0))
+          if(!addContext){
+            addContextFromTypeRef(ty.args(1))
+          }
         case _ =>
       }
     }
 
     if (nodeMode && m.ret.isDefined) {
-      addContextFromTypeRef(m.ret.get)
+      addContextFromTypeRef(m.ret.get.resolved)
     } else if (!nodeMode) {
       m.params.map(p => {
-        addContextFromTypeRef(p.ty)
+        addContextFromTypeRef(p.ty.resolved)
       })
     }
 

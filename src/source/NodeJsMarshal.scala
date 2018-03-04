@@ -186,10 +186,10 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           wr.wl(s"if($containerName->Get(i)->Is$nodeTemplType())").braced {
             //Cast to c++ types
             if (!binary) {
-              toCppArgument(tm.args(0), s"${converted}_elem", s"$containerName->Get(i)->To$nodeTemplType()", wr)
+              toCppArgument(tm.args(0), s"${converted}_elem", s"$containerName->Get(i)", wr)
             } else {
               //val context = "info.GetIsolate()->GetCurrentContext()"
-              wr.wl(s"auto ${converted}_elem = Nan::To<uint32_t>($containerName->Get(i)->To$nodeTemplType()).FromJust();")
+              wr.wl(s"auto ${converted}_elem = Nan::To<uint32_t>($containerName->Get(i)).FromJust();")
             }
             //Append to resulting container
             wr.wl(s"$converted.emplace_back(${converted}_elem);")
@@ -201,12 +201,12 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       if (!tm.args.isEmpty) {
 
         val cppTemplType = super.paramType(tm.args(0), true)
-        val nodeTemplType = paramType(tm.args(0))
+        val nodeTemplType = if(isInterface(tm.args(0))) "Object" else paramType(tm.args(0))
 
         if (container == "Map" && tm.args.length > 1) {
 
           val cppTemplValueType = super.paramType(tm.args(1), true)
-          val nodeTemplValueType = paramType(tm.args(1))
+          val nodeTemplValueType = if(isInterface(tm.args(1))) "Object" else paramType(tm.args(1))
 
           val containerName = s"${converted}_container"
           wr.wl(s"map<$cppTemplType, $cppTemplValueType> $converted;")
@@ -220,8 +220,8 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
             //Check types before access
             wr.wl(s"if(key->Is$nodeTemplType() && $containerName->Get(key)->Is$nodeTemplValueType())").braced {
               //Cast to c++ types
-              toCppArgument(tm.args(0), s"${converted}_key", s"key->To$nodeTemplType()", wr)
-              toCppArgument(tm.args(1), s"${converted}_value", s"$containerName->Get(key)->To$nodeTemplValueType()", wr)
+              toCppArgument(tm.args(0), s"${converted}_key", "key", wr)
+              toCppArgument(tm.args(1), s"${converted}_value", s"$containerName->Get(key)", wr)
               //Append to resulting container
               wr.wl(s"$converted.emplace(${converted}_key,${converted}_value);")
             }
@@ -286,7 +286,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
                 val error = s""""NodeJs Object to $nodeType failed""""
                 wr.wl(s"return Nan::ThrowError($error);")
               }
-              wr.wl(s"suto $converted = njs_ptr_$converted->getCppImpl();")
+              wr.wl(s"auto $converted = njs_ptr_$converted->getCppImpl();")
             }else{
               wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
             }
