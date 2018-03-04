@@ -11,6 +11,33 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
   protected val marshal = new NodeJsMarshal(spec)
   protected val cppMarshal = new CppMarshal(spec)
 
+  class CppRefs(name: String) {
+    val hpp = mutable.TreeSet[String]()
+    val hppFwds = mutable.TreeSet[String]()
+    val cpp = mutable.TreeSet[String]()
+
+    def find(ty: TypeRef, forwardDeclareOnly: Boolean, nodeMode: Boolean) {
+      find(ty.resolved, forwardDeclareOnly, nodeMode)
+    }
+
+    def find(tm: MExpr, forwardDeclareOnly: Boolean, nodeMode: Boolean) {
+      tm.args.foreach((x) => find(x, forwardDeclareOnly, nodeMode))
+      find(tm.base, forwardDeclareOnly, nodeMode)
+    }
+
+    def find(m: Meta, forwardDeclareOnly: Boolean, nodeMode: Boolean) = {
+      for (r <- marshal.hppReferences(m, name, forwardDeclareOnly, nodeMode)) r match {
+        case ImportRef(arg) => hpp.add("#include " + arg)
+        case DeclRef(decl, Some(spec.cppNamespace)) => hppFwds.add(decl)
+        case DeclRef(_, _) =>
+      }
+      for (r <- marshal.cppReferences(m, name, forwardDeclareOnly)) r match {
+        case ImportRef(arg) => cpp.add("#include " + arg)
+        case DeclRef(_, _) =>
+      }
+    }
+  }
+
   override def generateInterface(origin: String, ident: Ident, doc: Doc, typeParams: Seq[TypeParam], i: Interface): Unit = {
 
     val isNodeMode = true
@@ -384,6 +411,12 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
       def addContextFromTypeRef(ty: MExpr): Unit = {
       ty.base match {
+        case MList | MSet => addContextFromTypeRef(ty.args(0))
+        case MMap =>
+          addContextFromTypeRef(ty.args(0))
+          if(!addContext){
+            addContextFromTypeRef(ty.args(1))
+          }
         case d: MDef =>
           d.defType match {
             case DInterface => {
@@ -399,13 +432,13 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
                 }
               }
             }
+            case r: Record =>
+              for (f <- r.fields) {
+                if(!addContext){
+                  addContextFromTypeRef(f.ty.resolved)
+                }
+              }
             case _ =>
-          }
-        case MList | MSet => addContextFromTypeRef(ty.args(0))
-        case MMap =>
-          addContextFromTypeRef(ty.args(0))
-          if(!addContext){
-            addContextFromTypeRef(ty.args(1))
           }
         case _ =>
       }
@@ -424,33 +457,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
   override def generateEnum(origin: String, ident: Ident, doc: Doc, e: Enum): Unit = {}
 
   override def generateRecord(origin: String, ident: Ident, doc: Doc, params: Seq[TypeParam], r: Record): Unit = {}
-
-  class CppRefs(name: String) {
-    val hpp = mutable.TreeSet[String]()
-    val hppFwds = mutable.TreeSet[String]()
-    val cpp = mutable.TreeSet[String]()
-
-    def find(ty: TypeRef, forwardDeclareOnly: Boolean, nodeMode: Boolean) {
-      find(ty.resolved, forwardDeclareOnly, nodeMode)
-    }
-
-    def find(tm: MExpr, forwardDeclareOnly: Boolean, nodeMode: Boolean) {
-      tm.args.foreach((x) => find(x, forwardDeclareOnly, nodeMode))
-      find(tm.base, forwardDeclareOnly, nodeMode)
-    }
-
-    def find(m: Meta, forwardDeclareOnly: Boolean, nodeMode: Boolean) = {
-      for (r <- marshal.hppReferences(m, name, forwardDeclareOnly, nodeMode)) r match {
-        case ImportRef(arg) => hpp.add("#include " + arg)
-        case DeclRef(decl, Some(spec.cppNamespace)) => hppFwds.add(decl)
-        case DeclRef(_, _) =>
-      }
-      for (r <- marshal.cppReferences(m, name, forwardDeclareOnly)) r match {
-        case ImportRef(arg) => cpp.add("#include " + arg)
-        case DeclRef(_, _) =>
-      }
-    }
-  }
 }
 
 
