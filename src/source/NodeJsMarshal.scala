@@ -201,12 +201,12 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       if (!tm.args.isEmpty) {
 
         val cppTemplType = super.paramType(tm.args(0), true)
-        val nodeTemplType = if(isInterface(tm.args(0))) "Object" else paramType(tm.args(0))
+        val nodeTemplType = if(isInterface(tm.args(0)) || isRecord(tm.args(0))) "Object" else paramType(tm.args(0))
 
         if (container == "Map" && tm.args.length > 1) {
 
           val cppTemplValueType = super.paramType(tm.args(1), true)
-          val nodeTemplValueType = if(isInterface(tm.args(1))) "Object" else paramType(tm.args(1))
+          val nodeTemplValueType = if(isInterface(tm.args(1)) || isRecord(tm.args(0))) "Object" else paramType(tm.args(1))
 
           val containerName = s"${converted}_container"
           wr.wl(s"map<$cppTemplType, $cppTemplValueType> $converted;")
