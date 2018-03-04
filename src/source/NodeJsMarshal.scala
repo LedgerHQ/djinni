@@ -283,7 +283,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
             wr.wl(s"$nodeType *njs_ptr_$converted = static_cast<$nodeType *>(Nan::GetInternalFieldPointer(njs_$converted,0));")
             if(i.ext.cpp){
               wr.wl(s"if(!njs_ptr_$converted)").braced{
-                val error = s"NodeJs Object to $nodeType failed"
+                val error = s""""NodeJs Object to $nodeType failed""""
                 wr.wl(s"return Nan::ThrowError($error);")
               }
               wr.wl(s"suto $converted = njs_ptr_$converted->getCppImpl();")
