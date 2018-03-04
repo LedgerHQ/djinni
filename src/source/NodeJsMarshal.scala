@@ -354,7 +354,10 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       case MString => wr.wl(simpleCheckedCast("String"))
       case MDate => wr.wl(simpleCheckedCast("Date"))
       case MBinary => fromCppContainer("Array", true)
-      case MOptional => fromCppArgument(tm.args(0), converted, s"(*$converting)", wr)
+      case MOptional => {
+        val newConverting = if(isInterface(tm.args(0))) converting else s"(*$converting)"
+        fromCppArgument(tm.args(0), converted, newConverting, wr)
+      }
       case MList => fromCppContainer("Array")
       case MSet => fromCppContainer("Set")
       case MMap => fromCppContainer("Map")
