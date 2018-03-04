@@ -254,7 +254,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
         wr.wl(s"auto $converted = std::string(*string_$converted);")
       case MDate => wr.wl(s"auto $converted = Nan::To<$cppType>($converting).FromJust();")
       case MBinary => toCppContainer("Array", binary = true)
-      case MOptional => wr.wl(spec.cppOptionalTemplate)
+      case MOptional => toCppArgument(tm.arg(0),converted, converting, wr)
       case MList => toCppContainer("Array")
       case MSet => toCppContainer("Set")
       case MMap => toCppContainer("Map")
