@@ -128,7 +128,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
             }
           }
           //Get factory method if it exists (will be used for Nan::New method)
-          if (!factoryFound) {
+          if (!factoryFound && m.static) {
             factoryFound = m.ret.exists { x =>
               val returnTypeName = cppMarshal.paramType(x.resolved, true)
               returnTypeName.equals(s"std::shared_ptr<$cppClassName>")
