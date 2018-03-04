@@ -418,8 +418,8 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             addContextFromTypeRef(ty.args(1))
           }
         case d: MDef =>
-          d.defType match {
-            case DInterface => {
+          d.body match {
+            case i: Interface => {
               if (!addContext) {
                 addContext = true
                 wr.wl
