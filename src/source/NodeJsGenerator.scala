@@ -129,8 +129,13 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       m.ret.foreach((x) => refs.find(x, true, nodeMode))
     })
 
-    //For C++ interfaces we always have shared_ptr for c++ implementation member
-    if (!nodeMode && refs.hpp("#include <memory>")) {
+    if(refs.hpp("#include <memory>") &&
+      refs.cpp("#include <memory>")){
+      refs.cpp.remove("#include <memory>")
+    }else if (!nodeMode &&
+      //For C++ interfaces we always have shared_ptr for c++ implementation member
+      !refs.hpp("#include <memory>") &&
+      !refs.cpp("#include <memory>")) {
       refs.hpp.add("#include <memory>")
     }
 

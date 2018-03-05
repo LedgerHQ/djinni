@@ -105,7 +105,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
     ret.fold("void")(toNodeType(_, Some(spec.cppNamespace)))
   }
 
-  def hppReferences(m: Meta, exclude: String, forwardDeclareOnly: Boolean, nodeMode: Boolean): Seq[SymbolReference] = m match {
+  def hppReferences(m: Meta, exclude: String, forwardDeclareOnly: Boolean, nodeMode: Boolean, onlyNodeRef: Boolean = false): Seq[SymbolReference] = m match {
     case d: MDef => d.body match {
       case i: Interface =>
         val base = if (d.name != exclude) {
@@ -118,14 +118,15 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           cppInterfaceImport = s"""$cppInterfaceImport.${spec.cppHeaderExt}""""
           val nodeInterfaceImport = s""""${spec.nodeIncludeCpp}/${d.name}.${spec.cppHeaderExt}""""
 
-          if (nodeMode) {
+          if (nodeMode && !onlyNodeRef) {
             List(ImportRef("<memory>"), ImportRef(cppInterfaceImport), ImportRef(nodeInterfaceImport))
-          } else {
+          } else if(nodeMode && onlyNodeRef) {
+            List(ImportRef(cppInterfaceImport))
+          }else{
             List(ImportRef("<memory>"), ImportRef(cppInterfaceImport))
           }
 
-        } else
-          List(ImportRef("<memory>"))
+        } else List(ImportRef("<memory>"))
 
         spec.cppNnHeader match {
           case Some(nnHdr) => ImportRef(nnHdr) :: base
@@ -147,7 +148,16 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           d.body match {
             case r: Record =>
               if (d.name != exclude) {
-                List(ImportRef(include(nodeRecordImport, r.ext.cpp)))
+                var listOfReferences : Seq[SymbolReference] = List()
+                for (f <- r.fields) {
+                  val args = f.ty.resolved.args
+                  if(!args.isEmpty){
+                    args.foreach((arg)=> {
+                      listOfReferences = listOfReferences ++ cppReferences(arg.base, exclude, forwardDeclareOnly)
+                    })
+                  }
+                }
+                listOfReferences
               } else {
                 List()
               }
@@ -157,7 +167,12 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
               } else {
                 List()
               }
+            case i: Interface =>
+              val nodeMode = true
+              val onlyNodeRef = true
+              hppReferences(m, exclude, forwardDeclareOnly, nodeMode, onlyNodeRef)
             case _ => List()
+
           }
         case _ => List()
       }
@@ -352,7 +367,10 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
     def base(m: Meta): IndentWriter = m match {
       case p: MPrimitive => wr.wl(simpleCheckedCast(p.nodeJSName, false))
       case MString => wr.wl(simpleCheckedCast("String"))
-      case MDate => wr.wl(simpleCheckedCast("Date"))
+      case MDate => {
+      	wr.wl(s"auto date_$converting = chrono::duration_cast<chrono::seconds>(${converting}.time_since_epoch()).count();")
+      	wr.wl(s"auto $converted = Nan::New<Date>(date_$converting).ToLocalChecked();")
+      }
       case MBinary => fromCppContainer("Array", true)
       case MOptional => {
         val newConverting = if(isInterface(tm.args(0))) converting else s"(*$converting)"
