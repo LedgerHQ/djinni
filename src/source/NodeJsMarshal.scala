@@ -248,7 +248,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           val nodeTemplValueType = if(isInterface(tm.args(1)) || isRecord(tm.args(0))) "Object" else paramType(tm.args(1))
 
           val containerName = s"${converted}_container"
-          wr.wl(s"map<$cppTemplType, $cppTemplValueType> $converted;")
+          wr.wl(s"unordered_map<$cppTemplType, $cppTemplValueType> $converted;")
           wr.wl(s"Local<$container> $containerName = Local<$container>::Cast($converting);")
 
           //Get properties' names, loop over them and get their values
@@ -291,7 +291,10 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       case MString =>
         wr.wl(s"String::Utf8Value string_$converted($converting->ToString());")
         wr.wl(s"auto $converted = std::string(*string_$converted);")
-      case MDate => wr.wl(s"auto $converted = Nan::To<$cppType>($converting).FromJust();")
+      case MDate => {
+        wr.wl(s"auto time_$converted = Nan::To<int32_t>($converting).FromJust();")
+        wr.wl(s"auto $converted = chrono::system_clock::time_point(chrono::milliseconds(time_$converted));")
+      }
       case MBinary => toCppContainer("Array", binary = true)
       case MOptional => toCppArgument(tm.args(0),converted, converting, wr)
       case MList => toCppContainer("Array")
