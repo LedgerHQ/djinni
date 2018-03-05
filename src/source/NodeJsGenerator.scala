@@ -73,8 +73,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             w.wl
             w.wl(s"$ret $baseClassName::$methodName${params.mkString("(", ", ", ")")}$constFlag").braced {
 
-              addContext(m, w, isNodeMode)
-
               w.wl("//Wrap parameters")
               val countArgs = checkAndCastTypes(ident, i, m, w)
               var args: String = s"Handle<Value> args[$countArgs] = {"
@@ -287,10 +285,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
         initInstance = "cpp_instance"
 
-        wr.wl
-        wr.wl("Isolate *isolate = info.GetIsolate();")
-        wr.wl("Local<Context> context = isolate->GetCurrentContext();")
-
         val factoryName = factory.get.ident.name
         val factoryArgsLength = factory.get.params.length
         wr.wl
@@ -406,58 +400,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       wr.wl
       wr.wl(s"//Add template to target")
       wr.wl(s"target->Set(Nan::New<String>($quotedClassName).ToLocalChecked(), func_template->GetFunction());")
-    }
-
-  }
-
-  protected def addContext(m: Interface.Method, wr: writer.IndentWriter, nodeMode: Boolean): Unit = {
-
-    var addContext = false
-
-    def contextString(): Unit = {
-      addContext = true
-      wr.wl
-      if (nodeMode) {
-        wr.wl("Nan::HandleScope scope;")
-        wr.wl("Local<Context> context = Nan::GetCurrentContext();")
-      } else {
-        wr.wl("Isolate *isolate = info.GetIsolate();")
-        wr.wl("Local<Context> context = isolate->GetCurrentContext();")
-      }
-    }
-
-    def addContextFromTypeRef(ty: MExpr, returnType: Boolean = false): Unit = {
-      ty.base match {
-        case MOptional => addContextFromTypeRef(ty.args(0), returnType)
-        case MList | MSet => addContextFromTypeRef(ty.args(0))
-        case MMap =>
-          contextString()
-        case d: MDef =>
-          d.body match {
-            case i: Interface => {
-              //No need for context if Interface is only impl in c++ and it's a return type
-              if (!addContext && (!returnType || i.ext.nodeJS)) {
-                contextString()
-              }
-            }
-            case r: Record =>
-              for (f <- r.fields) {
-                if(!addContext){
-                  addContextFromTypeRef(f.ty.resolved)
-                }
-              }
-            case _ =>
-          }
-        case _ =>
-      }
-    }
-
-    if (!nodeMode) {
-      m.params.map(p => addContextFromTypeRef(p.ty.resolved))
-    }
-
-    if (!addContext && m.ret.isDefined) {
-      addContextFromTypeRef(m.ret.get.resolved, returnType = true )
     }
 
   }

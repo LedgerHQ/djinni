@@ -88,8 +88,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
               val error = s""""$baseClassName::$methodName needs $argsLength arguments""""
               w.wl(s"return Nan::ThrowError($error);")
             }
-            //Check if we should define context
-            addContext(m, w, isNodeMode)
+
             w.wl
             w.wl("//Check if parameters have correct types")
             //Retrieve all method’s parameter and test their types
