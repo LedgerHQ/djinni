@@ -368,7 +368,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       if (!tm.args.isEmpty) {
 
         if (container == "Map" && tm.args.length > 1) {
-          wr.wl(s"Local<$container> $converted = Nan::New<$container>(context);")
+          wr.wl(s"Local<$container> $converted = Map::New((Nan::GetCurrentContext())->GetIsolate());")
           //Loop and cast elements of $converting
           wr.wl(s"for(auto const& elem : $converting)").braced {
             //Cast
