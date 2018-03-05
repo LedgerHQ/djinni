@@ -31,10 +31,10 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         case DeclRef(decl, Some(spec.cppNamespace)) => hppFwds.add(decl)
         case DeclRef(_, _) =>
       }
-      for (r <- marshal.cppReferences(m, name, forwardDeclareOnly)) r match {
-        case ImportRef(arg) => cpp.add("#include " + arg)
-        case DeclRef(_, _) =>
-      }
+//      for (r <- marshal.cppReferences(m, name, forwardDeclareOnly)) r match {
+//        case ImportRef(arg) => cpp.add("#include " + arg)
+//        case DeclRef(_, _) =>
+//      }
     }
   }
 
