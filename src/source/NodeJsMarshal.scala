@@ -257,10 +257,11 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           wr.wl(s"for(uint32_t i = 0; i < $propretyNames->Length(); i++)").braced {
             wr.wl(s"auto key = $propretyNames->Get(i);")
             //Check types before access
-            wr.wl(s"if(key->Is$nodeTemplType() && $containerName->Get(key)->Is$nodeTemplValueType())").braced {
+            wr.wl(s"auto ${converted}_key_ctx = $containerName->Get(context, key).ToLocalChecked();")
+            wr.wl(s"if(key->Is$nodeTemplType() && ${converted}_key_ctx->Is$nodeTemplValueType())").braced {
               //Cast to c++ types
               toCppArgument(tm.args(0), s"${converted}_key", "key", wr)
-              toCppArgument(tm.args(1), s"${converted}_value", s"$containerName->Get(key)", wr)
+              toCppArgument(tm.args(1), s"${converted}_value", s"${converted}_key_ctx", wr)
               //Append to resulting container
               wr.wl(s"$converted.emplace(${converted}_key,${converted}_value);")
             }
@@ -367,13 +368,13 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       if (!tm.args.isEmpty) {
 
         if (container == "Map" && tm.args.length > 1) {
-          wr.wl(s"Local<$container> $converted = Nan::New<$container>();")
+          wr.wl(s"Local<$container> $converted = Nan::New<$container>(context);")
           //Loop and cast elements of $converting
           wr.wl(s"for(auto const& elem : $converting)").braced {
             //Cast
             fromCppArgument(tm.args(0), s"${converted}_first", "elem.first", wr)
             fromCppArgument(tm.args(1), s"${converted}_second", "elem.second", wr)
-            wr.wl(s"$converted->Set(context, ${converted}_first, ${converted}_second});")
+            wr.wl(s"$converted->Set(context, ${converted}_first, ${converted}_second);")
           }
           wr.wl
 

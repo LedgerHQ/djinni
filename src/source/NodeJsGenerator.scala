@@ -414,27 +414,30 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
     var addContext = false
 
-      def addContextFromTypeRef(ty: MExpr): Unit = {
+    def contextString(): Unit = {
+      addContext = true
+      wr.wl
+      if (nodeMode) {
+        wr.wl("Nan::HandleScope scope;")
+        wr.wl("Local<Context> context = Nan::GetCurrentContext();")
+      } else {
+        wr.wl("Isolate *isolate = info.GetIsolate();")
+        wr.wl("Local<Context> context = isolate->GetCurrentContext();")
+      }
+    }
+
+    def addContextFromTypeRef(ty: MExpr, returnType: Boolean = false): Unit = {
       ty.base match {
+        case MOptional => addContextFromTypeRef(ty.args(0), returnType)
         case MList | MSet => addContextFromTypeRef(ty.args(0))
         case MMap =>
-          addContextFromTypeRef(ty.args(0))
-          if(!addContext){
-            addContextFromTypeRef(ty.args(1))
-          }
+          contextString()
         case d: MDef =>
           d.body match {
             case i: Interface => {
-              if (!addContext) {
-                addContext = true
-                wr.wl
-                if (nodeMode) {
-                  wr.wl("Nan::HandleScope scope;")
-                  wr.wl("Local<Context> context = Nan::GetCurrentContext();")
-                } else {
-                  wr.wl("Isolate *isolate = info.GetIsolate();")
-                  wr.wl("Local<Context> context = isolate->GetCurrentContext();")
-                }
+              //No need for context if Interface is only impl in c++ and it's a return type
+              if (!addContext && (!returnType || i.ext.nodeJS)) {
+                contextString()
               }
             }
             case r: Record =>
@@ -449,12 +452,12 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       }
     }
 
-    if (nodeMode && m.ret.isDefined) {
-      addContextFromTypeRef(m.ret.get.resolved)
-    } else if (!nodeMode) {
-      m.params.map(p => {
-        addContextFromTypeRef(p.ty.resolved)
-      })
+    if (!nodeMode) {
+      m.params.map(p => addContextFromTypeRef(p.ty.resolved))
+    }
+
+    if (!addContext && m.ret.isDefined) {
+      addContextFromTypeRef(m.ret.get.resolved, returnType = true )
     }
 
   }
