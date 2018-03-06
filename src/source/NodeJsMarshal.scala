@@ -106,6 +106,14 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
   }
 
   def hppReferences(m: Meta, exclude: String, forwardDeclareOnly: Boolean, nodeMode: Boolean, onlyNodeRef: Boolean = false): Seq[SymbolReference] = m match {
+    case MOptional =>
+      //If cppOptionalHeader is relative path, we have to concatenate with cpp include path
+      var importRef = spec.cppOptionalHeader
+      if(importRef.length > 0){
+        importRef = importRef.slice(1, importRef.length - 1)
+        importRef = if(importRef == '<') spec.cppOptionalHeader else s""""${spec.nodeIncludeCpp}/${importRef}""""
+      }
+      List(ImportRef(importRef))
     case d: MDef =>
       val nodeRecordImport = s"${spec.nodeIncludeCpp}/${d.name}"
       d.body match {
