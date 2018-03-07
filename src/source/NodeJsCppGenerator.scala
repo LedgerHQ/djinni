@@ -81,7 +81,19 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
         for (m <- i.methods) {
           val methodName = m.ident.name
           w.w(s"NAN_METHOD($baseClassName::$methodName)").braced {
-            val argsLength = m.params.length
+
+            w.wl("Nan::HandleScope scope;")
+
+            //Check if we have Callback or ListCallback as argument
+            var hasCallback = false
+            m.params.foreach((param)=>{
+              if(param.ty.expr.ident.name.contains("Callback") ||
+              param.ty.expr.ident.name.contains("ListCallback")){
+                hasCallback = true
+              }
+            })
+
+            val argsLength = if(hasCallback) m.params.length - 1 else m.params.length
             w.wl
             w.wl("//Check if method called with right number of arguments")
             w.wl(s"if(info.Length() != $argsLength)").braced {
@@ -124,6 +136,11 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
               w.wl(s"info.GetReturnValue().Set(arg_$countArgs);")
             } else {
               w.wl(s"cpp_impl->$methodName($args);")
+
+              if(hasCallback){
+                w.wl("info.GetReturnValue().Set(resolver->GetPromise());")
+              }
+
             }
           }
           //Get factory method if it exists (will be used for Nan::New method)
@@ -155,6 +172,9 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
     wr.wl(s"Nan::Persistent<ObjectTemplate> $baseClassName::${cppClassName}_prototype;")
     wr.wl
     wr.w(s"Handle<Object> $baseClassName::wrap(const $cpp_shared_ptr &object)").braced {
+
+      wr.wl("Nan::HandleScope scope;")
+
       wr.wl(s"Local<ObjectTemplate> local_prototype = Nan::New(${cppClassName}_prototype);")
       wr.wl
       wr.wl("Handle<Object> obj;")

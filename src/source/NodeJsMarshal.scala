@@ -169,48 +169,6 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
     case _ => super.hppReferences(m, exclude, forwardDeclareOnly)
   }
 
-  /*override def cppReferences(m: Meta, exclude: String, forwardDeclareOnly: Boolean): Seq[SymbolReference] = {
-
-    if (!forwardDeclareOnly) {
-      List()
-    } else {
-      m match {
-        case d: MDef =>
-          val nodeRecordImport = s"${spec.nodeIncludeCpp}/${d.name}"
-          d.body match {
-            case r: Record =>
-              if (d.name != exclude) {
-                var listOfReferences : Seq[SymbolReference] = List()
-                for (f <- r.fields) {
-                  val args = f.ty.resolved.args
-                  if(!args.isEmpty){
-                    args.foreach((arg)=> {
-                      listOfReferences = listOfReferences ++ cppReferences(arg.base, exclude, forwardDeclareOnly)
-                    })
-                  }
-                }
-                listOfReferences
-              } else {
-                List()
-              }
-            case e: Enum =>
-              if (d.name != exclude) {
-                List(ImportRef(include(nodeRecordImport)))
-              } else {
-                List()
-              }
-            case i: Interface =>
-              val nodeMode = true
-              val onlyNodeRef = true
-              hppReferences(m, exclude, forwardDeclareOnly, nodeMode, onlyNodeRef)
-            case _ => List()
-
-          }
-        case _ => List()
-      }
-    }
-  }*/
-
   override def include(ident: String, isExtendedRecord: Boolean = false): String = {
     val prefix = if (isExtendedRecord) spec.cppExtendedRecordIncludePrefix else spec.cppIncludePrefix
     q(prefix + spec.cppFileIdentStyle(ident) + "." + spec.cppHeaderExt)
@@ -340,6 +298,15 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
               wr.wl(s"auto $converted = njs_ptr_$converted->getCppImpl();")
             }else{
               wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
+
+              //Set promise if it is a callback
+              if(d.name.contains("Callback")){
+                wr.wl
+                wr.wl("//Create promise and set it into Callcack")
+                wr.wl("auto resolver = v8::Promise::Resolver::New(Nan::GetCurrentContext()).ToLocalChecked();")
+                wr.wl(s"$converted->SetPromise(resolver);")
+              }
+
             }
             wr.wl
         }

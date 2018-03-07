@@ -69,39 +69,71 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             w.wl
             w.wl(s"$ret $baseClassName::$methodName${params.mkString("(", ", ", ")")}$constFlag").braced {
 
+              /*
+                Special treatment for Callbacks
+                We consider "Callback" a keyword to be contained in all callback objects,
+                they will implement only a "onCallback" method meeting this signature (idl format) :
+                template <typename T, typename S>
+                onCallback(result: optional<T>, error: optional<S>);
+
+                WARNING: Be sure to respect arguments' number and order
+               */
+
+              val isCallback = methodName.contains("onCallback") &&
+                idNode.ty(ident.name).contains("Callback") &&
+                (m.params.length == 2)
+              
               w.wl("//Wrap parameters")
               val countArgs = checkAndCastTypes(ident, i, m, w)
-              var args: String = s"Handle<Value> args[$countArgs] = {"
-              for (i <- 0 to countArgs - 1) {
-                args = s"${args}arg_$i"
-                if (i < m.params.length - 1) {
-                  args = s"${args},"
+
+              if(isCallback){
+
+                val errorName = m.params(1).ident.name
+
+                w.wl("Nan::HandleScope scope;")
+                w.wl("auto local_resolver = Nan::New<Promise::Resolver>(pers_resolver);")
+                w.wl(s"if($errorName)").braced {
+                  w.wl("auto rejected = local_resolver->Reject(Nan::GetCurrentContext(), arg_1);")
+                  w.wl("rejected.FromJust();")
+                }
+                w.wl(s"else").braced {
+                  w.wl("auto resolve = local_resolver->Resolve(Nan::GetCurrentContext(), arg_0);")
+                  w.wl("resolve.FromJust();")
+                }
+
+              } else {
+
+                var args: String = s"Handle<Value> args[$countArgs] = {"
+                for (i <- 0 to countArgs - 1) {
+                  args = s"${args}arg_$i"
+                  if (i < m.params.length - 1) {
+                    args = s"${args},"
+                  }
+                }
+                w.wl(s"${args}};")
+
+                //Get local from persistent
+                w.wl("Local<Object> local_njs_impl = Nan::New<Object>(njs_impl);")
+                w.wl("if(!local_njs_impl->IsObject())").braced {
+                  val error = s""""$baseClassName::$methodName fail to retrieve node implementation""""
+                  w.wl(s"Nan::ThrowError($error);")
+                }
+
+                val quotedMethod = s""""$methodName""""
+                w.wl(s"auto calling_funtion = Nan::Get(local_njs_impl,Nan::New<String>($quotedMethod).ToLocalChecked()).ToLocalChecked();")
+                w.wl("auto handle = this->handle();")
+                w.wl(s"auto result_$methodName = Nan::CallAsFunction(calling_funtion->ToObject(),handle,$countArgs,args);")
+                w.wl(s"if(result_$methodName.IsEmpty())").braced {
+                  val error = s""""$baseClassName::$methodName call failed""""
+                  w.wl(s"Nan::ThrowError($error);")
+                }
+
+                if (m.ret.isDefined && ret != "void") {
+                  w.wl(s"auto checkedResult_$methodName = result_$methodName.ToLocalChecked();")
+                  marshal.toCppArgument(m.ret.get.resolved, s"fResult_$methodName", s"checkedResult_$methodName", w)
+                  w.wl(s"return fResult_$methodName;")
                 }
               }
-              w.wl(s"${args}};")
-
-              //Get local from persistent
-              w.wl("Local<Object> local_njs_impl = Nan::New<Object>(njs_impl);")
-              w.wl("if(!local_njs_impl->IsObject())").braced {
-                val error = s""""$baseClassName::$methodName fail to retrieve node implementation""""
-                w.wl(s"Nan::ThrowError($error);")
-              }
-
-              val quotedMethod = s""""$methodName""""
-              w.wl(s"auto calling_funtion = Nan::Get(local_njs_impl,Nan::New<String>($quotedMethod).ToLocalChecked()).ToLocalChecked();")
-              w.wl("auto handle = this->handle();")
-              w.wl(s"auto result_$methodName = Nan::CallAsFunction(calling_funtion->ToObject(),handle,$countArgs,args);")
-              w.wl(s"if(result_$methodName.IsEmpty())").braced {
-                val error = s""""$baseClassName::$methodName call failed""""
-                w.wl(s"Nan::ThrowError($error);")
-              }
-
-              if (m.ret.isDefined && ret != "void") {
-                w.wl(s"auto checkedResult_$methodName = result_$methodName.ToLocalChecked();")
-                marshal.toCppArgument(m.ret.get.resolved, s"fResult_$methodName", s"checkedResult_$methodName", w)
-                w.wl(s"return fResult_$methodName;")
-              }
-
             }
           }
         }
@@ -149,6 +181,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       fileName = s"$fileName.${spec.cppHeaderExt}"
 
       createFile(spec.nodeOutFolder.get, fileName, { (w: writer.IndentWriter) =>
+
 
         w.wl("// AUTOGENERATED FILE - DO NOT MODIFY!")
         w.wl("// This file generated by Djinni from " + origin)
@@ -213,7 +246,12 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           } else {
 
             // Destructor
-            w.wl(s"~$className() {njs_impl.Reset();};")
+            w.wl(s"~$className()").bracedSemi {
+              w.wl("njs_impl.Reset();")
+              if(ident.name.contains("Callback")){
+                w.wl("pers_resolver.Reset();")
+              }
+            }
 
             //Constructor
             w.wl(s"$className(Local<Object> njs_implementation){njs_impl.Reset(njs_implementation);};")
@@ -228,6 +266,13 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
                 w.wl
                 writeDoc(w, m.doc)
                 w.wl(s"$ret $methodName${params.mkString("(", ", ", ")")}$constFlag;")
+              }
+            }
+
+            //Setter for promise
+            if(ident.name.contains("Callback")){
+              w.wl("void SetPromise(Local<Promise::Resolver> resolver)").braced {
+                w.wl("pers_resolver.Reset(resolver);")
               }
             }
 
@@ -253,7 +298,12 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             //Implementation in Node.js
             w.wl("static NAN_METHOD(addRef);")
             w.wl("static NAN_METHOD(removeRef);")
-            w.wl("Nan::Persistent <Object> njs_impl;")
+            w.wl("Nan::Persistent<Object> njs_impl;")
+
+            //Persistent promise
+            if(ident.name.contains("Callback")){
+              w.wl("Nan::Persistent<Promise::Resolver> pers_resolver;")
+            }
 
           }
         }
@@ -283,6 +333,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
         val factoryName = factory.get.ident.name
         val factoryArgsLength = factory.get.params.length
+
         wr.wl
         wr.wl(s"//Check if $baseClassName::New called with right number of arguments")
         wr.wl(s"if(info.Length() != $factoryArgsLength)").braced {
