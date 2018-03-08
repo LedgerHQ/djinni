@@ -29,8 +29,6 @@ java_package="com.dropbox.textsort"
 
 gen_stamp="$temp_out/gen.stamp"
 
-objc_swift_bridging_header="TextSort-Bridging-Header.h"
-
 if [ $# -eq 0 ]; then
     # Normal build.
     true
