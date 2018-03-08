@@ -377,7 +377,6 @@ object Main {
           None
         }
 
-<<<<<<< HEAD
         val objcSwiftBridgingHeaderWriter = if (objcSwiftBridgingHeader.isDefined && objcOutFolder.isDefined) {
           val objcSwiftBridgingHeaderFile = new File(objcOutFolder.get.getPath, objcSwiftBridgingHeader.get + ".h")
           if (objcSwiftBridgingHeaderFile.getParentFile != null)

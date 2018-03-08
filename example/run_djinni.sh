@@ -73,7 +73,6 @@ fi
     --objcpp-out "$temp_out/objc" \
     --objc-type-prefix TXS \
     --objc-swift-bridging-header "TextSort-Bridging-Header" \
-    \
     --node-out "$temp_out/nodejs" \
     --node-type-prefix NJS \
     --node-include-cpp "../cpp" \
