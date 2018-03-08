@@ -68,7 +68,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
             for (m <- i.methods) {
               //Overload writeDoc if necessary
               writeDoc(w, m.doc)
-              val params = m.params.map(p => marshal.paramType(p.ty.resolved) + ": " + idNode.local(p.ident))
+              val params = m.params.map(p =>  idNode.local(p.ident) + ": " + marshal.paramType(p.ty.resolved))
               val methodName = m.ident.name
               var methodDeclaration = s"declare function $methodName${params.mkString("(", ", ", ")")}"
               val ret = marshal.returnType(m.ret)
