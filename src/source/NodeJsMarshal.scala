@@ -83,6 +83,19 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
     expr(tm)
   }
 
+  def toJSType(tm: MExpr): String = {
+    def base(m: Meta): String = m match {
+      case p: MPrimitive => p.jsName
+      case MString => "string"
+      case MList => s"Array<${toJSType(tm.args(0))}>"
+      case MSet => s"Set<${toJSType(tm.args(0))}>"
+      case MMap => s"Map<${toJSType(tm.args(0))}, ${toJSType(tm.args(1))}>"
+      case MOptional => s"?${toJSType(tm.args(0))}"
+      case _ => toNodeType(tm, None, Seq())
+    }
+    base(tm.base)
+  }
+
   private def withNamespace(name: String, namespace: Option[String] = None, scopeSymbols: Seq[String] = Seq()): String = {
 
     val ns = namespace match {

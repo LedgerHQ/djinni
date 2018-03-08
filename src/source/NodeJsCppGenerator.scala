@@ -63,18 +63,20 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
         case r: Record =>
         case i: Interface =>
           //First declare a "class"
+          writeDoc(w, td.doc)
           w.wl(s"declare class ${idNode.ty(td.ident.name)}").braced {
             //then declare all methods as "functions"
             for (m <- i.methods) {
               //Overload writeDoc if necessary
               writeDoc(w, m.doc)
-              val params = m.params.map(p =>  idNode.local(p.ident) + ": " + marshal.paramType(p.ty.resolved))
+              val params = m.params.map(p =>  idNode.local(p.ident) + ": " + marshal.toJSType(p.ty.resolved))
               val methodName = m.ident.name
               var methodDeclaration = s"declare function $methodName${params.mkString("(", ", ", ")")}"
               val ret = marshal.returnType(m.ret)
               if (m.ret.isDefined && ret != "void") {
-                methodDeclaration = s"$methodDeclaration: $ret;"
+                methodDeclaration = s"$methodDeclaration: ${marshal.toJSType(m.ret.get.resolved)}"
               }
+              methodDeclaration = s"$methodDeclaration;"
               if (m.static) {
                 methodDeclaration = s"static $methodDeclaration"
               }
