@@ -114,8 +114,6 @@ package object generatorTools {
                             method: IdentConverter, field: IdentConverter, local: IdentConverter,
                             enum: IdentConverter, const: IdentConverter)
 
-<<<<<<< HEAD
-=======
   case class SwiftIdentStyle(ty: IdentConverter, typeParam: IdentConverter,
                              method: IdentConverter, field: IdentConverter, local: IdentConverter,
                              enum: IdentConverter, const: IdentConverter)
@@ -128,7 +126,6 @@ package object generatorTools {
                             enum: IdentConverter, const: IdentConverter)
 
 
->>>>>>> Integrate Nodejs code generation
   object IdentStyle {
     val camelUpper = (s: String) => s.split('_').map(firstUpper).mkString
     val camelLower = (s: String) => {
@@ -143,12 +140,9 @@ package object generatorTools {
     val javaDefault = JavaIdentStyle(camelUpper, camelUpper, camelLower, camelLower, camelLower, underCaps, underCaps)
     val cppDefault = CppIdentStyle(camelUpper, camelUpper, camelUpper, underLower, underLower, underLower, underCaps, underCaps)
     val objcDefault = ObjcIdentStyle(camelUpper, camelUpper, camelLower, camelLower, camelLower, camelUpper, camelUpper)
-<<<<<<< HEAD
-=======
     val swiftDefault = SwiftIdentStyle(camelUpper, camelUpper, camelLower, camelLower, camelLower, camelLower, camelLower)
     val javascriptDefault = JavascriptIdentStyle(camelUpper, camelUpper, camelUpper, underLower, underLower, underLower, underCaps, underCaps)
     val nodeDefault = NodeIdentStyle(camelUpper, camelUpper, camelUpper, underLower, underLower, underLower, underCaps, underCaps)
->>>>>>> Integrate Nodejs code generation
 
     val styles = Map(
       "FooBar" -> camelUpper,
