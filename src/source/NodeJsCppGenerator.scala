@@ -120,10 +120,20 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
           w.w(s"NAN_METHOD($baseClassName::$methodName)").braced {
 
             //Check if we have Callback or ListCallback as argument
+            var args = ""
+            var resolver = ""
             var hasCallback = false
-            m.params.foreach((param) => {
-              if (param.ty.expr.ident.name.contains("Callback") ||
-                param.ty.expr.ident.name.contains("ListCallback")) {
+            m.params.foreach(p => {
+              val index = m.params.indexOf(p)
+
+              args = s"${args}arg_$index"
+              if (p != m.params.last) {
+                args = s"${args},"
+              }
+
+              if (p.ty.expr.ident.name.contains("Callback") ||
+                p.ty.expr.ident.name.contains("ListCallback")) {
+                resolver = s"arg_${index}_resolver"
                 hasCallback = true
               }
             })
@@ -140,29 +150,31 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
             w.wl("//Check if parameters have correct types")
             //Retrieve all method’s parameter and test their types
             val countArgs = checkAndCastTypes(ident, i, m, w)
-            var args: String = ""
-            for (i <- 0 to countArgs - 1) {
-              args = s"${args}arg_$i"
-              if (i < m.params.length - 1) {
-                args = s"${args},"
+
+            //If it's static method no need to get C++ implementation
+            if(!m.static) {
+              w.wl
+              w.wl("//Unwrap current object and retrieve its Cpp Implementation")
+              w.wl(s"$baseClassName* obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
+              w.wl(s"auto cpp_impl = obj->getCppImpl();")
+
+              //Test if implementation is null
+              w.wl(s"if(!cpp_impl)").braced {
+                val error = s""""$baseClassName::$methodName : implementation of $cppClassName is not valid""""
+                w.wl(s"return Nan::ThrowError($error);")
               }
-            }
-
-            w.wl
-            w.wl("//Unwrap current object and retrieve its Cpp Implementation")
-            w.wl(s"$baseClassName* obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
-            w.wl(s"auto cpp_impl = obj->getCppImpl();")
-
-            //Test if implementation is null
-            w.wl(s"if(!cpp_impl)").braced {
-              val error = s""""$baseClassName::$methodName : implementation of $cppClassName is not valid""""
-              w.wl(s"return Nan::ThrowError($error);")
             }
 
             val cppRet = cppMarshal.returnType(m.ret)
             if (m.ret.isDefined && cppRet != "void") {
+
               w.wl
-              w.wl(s"auto result = cpp_impl->$methodName($args);")
+              if(!m.static) {
+                w.wl(s"auto result = cpp_impl->$methodName($args);")
+              } else {
+                w.wl(s"auto result = ${idCpp.ty(ident.name)}::$methodName($args);")
+              }
+
               w.wl
               w.wl("//Wrap result in node object")
               marshal.fromCppArgument(m.ret.get.resolved, s"arg_$countArgs", "result", w)
@@ -173,7 +185,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
               w.wl(s"cpp_impl->$methodName($args);")
 
               if (hasCallback) {
-                w.wl("info.GetReturnValue().Set(resolver->GetPromise());")
+                w.wl(s"info.GetReturnValue().Set($resolver->GetPromise());")
               }
 
             }
@@ -221,10 +233,12 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
           wr.wl("new_obj->Ref();")
         }
       }
+
       wr.wl("else").braced {
         val error = s""""$baseClassName::wrap: object template not valid""""
         wr.wl(s"Nan::ThrowError($error);")
       }
+
       wr.wl("return obj;")
     }
   }

@@ -205,6 +205,17 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         w.wl
         w.w(classInheritance).bracedSemi {
 
+          //Callbacks always treated differently
+          var isCallback = false
+          if(ident.name.contains("Callback")) {
+            for (m <- i.methods) {
+              val methodName = m.ident.name
+              if(methodName.contains("onCallback") && (m.params.length == 2)) {
+                isCallback = true
+              }
+            }
+          }
+
           w.wlOutdent("public:")
           w.wl
           w.wl(s"static void Initialize(Local<Object> target);")
@@ -228,14 +239,22 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
             // Destructor
             w.wl(s"~$className()").bracedSemi {
-              w.wl("njs_impl.Reset();")
-              if (ident.name.contains("Callback")) {
+              w.wl("persistent().Reset();")
+
+              if (isCallback) {
                 w.wl("pers_resolver.Reset();")
+              } else {
+                w.wl("njs_impl.Reset();")
+                w.wl("njs_impl.Reset();")
               }
             }
 
             //Constructor
-            w.wl(s"$className(Local<Object> njs_implementation){njs_impl.Reset(njs_implementation);};")
+            if (isCallback){
+              w.wl(s"$className(Local<Promise::Resolver> resolver){pers_resolver.Reset(resolver);};")
+            } else {
+              w.wl(s"$className(Local<Object> njs_implementation){njs_impl.Reset(njs_implementation);};")
+            }
 
             //For node implementation, use C++ types
             for (m <- i.methods) {
@@ -250,24 +269,15 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
               }
             }
 
-            //Setter for promise
-            if (ident.name.contains("Callback")) {
-              w.wl("void SetPromise(Local<Promise::Resolver> resolver)").braced {
-                w.wl("pers_resolver.Reset(resolver);")
-              }
-            }
-
           }
           w.wl
           // Methods
           w.wlOutdent("private:")
           for (m <- i.methods) {
             val methodName = m.ident.name
-            if (!nodeMode) {
               writeDoc(w, m.doc)
               w.wl(s"static NAN_METHOD($methodName);")
               w.wl
-            }
           }
           //Add declaration of New (Nan) method
           w.wl(s"static NAN_METHOD(New);")
@@ -279,11 +289,12 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
             //Implementation in Node.js
             w.wl("static NAN_METHOD(addRef);")
             w.wl("static NAN_METHOD(removeRef);")
-            w.wl("Nan::Persistent<Object> njs_impl;")
 
             //Persistent promise
-            if (ident.name.contains("Callback")) {
+            if (isCallback) {
               w.wl("Nan::Persistent<Promise::Resolver> pers_resolver;")
+            } else {
+              w.wl("Nan::Persistent<Object> njs_impl;")
             }
 
           }
@@ -340,15 +351,23 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       }
 
       if (i.ext.nodeJS) {
+        //If callback instanciate a Resolver
+        //auto arg_1_resolver = v8::Promise::Resolver::New(Nan::GetCurrentContext()).ToLocalChecked();
         wr.wl
-        wr.wl(s"$baseClassName *node_instance = nullptr;")
-        wr.wl("if(info[0]->IsObject())").braced {
-          wr.wl(s"node_instance = new $baseClassName(info[0]->ToObject());")
+        if (ident.name.contains("Callback")){
+          wr.wl("auto resolver = v8::Promise::Resolver::New(Nan::GetCurrentContext()).ToLocalChecked();")
+          wr.wl(s"$baseClassName *node_instance = new $baseClassName(resolver);")
+        } else {
+          wr.wl(s"$baseClassName *node_instance = nullptr;")
+          wr.wl("if(info[0]->IsObject())").braced {
+            wr.wl(s"node_instance = new $baseClassName(info[0]->ToObject());")
+          }
+          wr.wl("else").braced {
+            val error = s""""$baseClassName::New requires an implementation from node""""
+            wr.wl(s"return Nan::ThrowError($error);")
+          }
         }
-        wr.wl("else").braced {
-          val error = s""""$baseClassName::New requires an implementation from node""""
-          wr.wl(s"return Nan::ThrowError($error);")
-        }
+
       } else {
         wr.wl(s"$baseClassName *node_instance = new $baseClassName($initInstance);")
       }
@@ -412,11 +431,11 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         wr.wl
         wr.wl(s"//SetPrototypeMethod all methods")
         for (m <- i.methods) {
-          if (!m.static) {
+          //if (!m.static) {
             val methodName = m.ident.name
             val quotedMethodName = "\"" + methodName + "\""
             wr.wl(s"Nan::SetPrototypeMethod(func_template,$quotedMethodName, $methodName);")
-          }
+          //}
         }
         val cppClassName = cppMarshal.typename(ident, i)
         wr.wl("//Set object prototype")
