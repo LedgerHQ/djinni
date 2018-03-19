@@ -92,6 +92,9 @@ package object generatorTools {
                    nodeIncludeCpp: String,
                    nodeIdentStyle: NodeIdentStyle,
                    nodeFileIdentStyle: IdentConverter,
+                   reactIncludeObjc: String,
+                   reactNativeOutFolder: Option[File],
+                   reactNativeTypePrefix: String,
                    traceMethodCalls: Boolean)
 
   def preComma(s: String) = {
@@ -262,6 +265,12 @@ package object generatorTools {
           createFolder("NodeJSCpp", spec.nodeOutFolder.get)
         }
         new NodeJsCppGenerator(spec).generate(idl)
+      }
+      if (spec.reactNativeOutFolder.isDefined) {
+        if (!spec.skipGeneration) {
+          createFolder("React-Native", spec.reactNativeOutFolder.get)
+        }
+        new ReactNativeObjcGenerator(spec).generate(idl)
       }
       if (spec.yamlOutFolder.isDefined) {
         if (!spec.skipGeneration) {

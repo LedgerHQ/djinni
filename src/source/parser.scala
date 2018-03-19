@@ -78,13 +78,16 @@ private object IdlParser extends RegexParsers {
   }
 
   def ext(default: Ext) = (rep1("+" ~> ident) >> checkExts) | success(default)
-  def extRecord = ext(Ext(false, false, false))
-  def extInterface = ext(Ext(true, true, true))
+  def extRecord = ext(Ext(false, false, false, false, false, false))
+  def extInterface = ext(Ext(true, true, true, true, true, true))
 
   def checkExts(parts: List[Ident]): Parser[Ext] = {
     var foundCpp = false
     var foundJava = false
     var foundObjc = false
+    var foundSwift = false
+    var foundNode = false
+    var foundReactNative = false
 
     for (part <- parts)
       part.name match {
@@ -108,9 +111,13 @@ private object IdlParser extends RegexParsers {
           if (foundNode) return err("Found multiple \"n\" modifiers")
           foundNode = true
         }
+        case "r" => {
+          if (foundReactNative) return err("Found multiple \"r\" modifiers")
+          foundReactNative = true
+        }
         case _ => return err("Invalid modifier \"" + part.name + "\"")
       }
-    success(Ext(foundJava, foundCpp, foundObjc))
+    success(Ext(foundJava, foundCpp, foundObjc, foundSwift, foundNode, foundReactNative))
   }
 
   def typeDef: Parser[TypeDef] = record | enum | flags | interface

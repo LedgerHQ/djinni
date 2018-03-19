@@ -19,4 +19,6 @@
 /** For the localhost / command-line demo */
 + (nonnull TXSItemList *)runSort:(nonnull TXSItemList *)items;
 
+- (int32_t)count;
+
 @end

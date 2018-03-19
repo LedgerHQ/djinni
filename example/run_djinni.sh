@@ -24,6 +24,7 @@ jni_out="$base_dir/generated-src/jni"
 objc_out="$base_dir/generated-src/objc"
 nodejs_out="$base_dir/generated-src/nodejs"
 java_out="$base_dir/generated-src/java/com/dropbox/textsort"
+react_out="$base_dir/generated-src/react-native"
 
 java_package="com.dropbox.textsort"
 
@@ -77,6 +78,9 @@ fi
     --node-type-prefix NJS \
     --node-include-cpp "../cpp" \
     --node-package ledgerapp_nodejs \
+    --react-native-out "$temp_out/react-native" \
+    --react-native-type-prefix RCT \
+    --react-include-objc "../objc" \
     \
     --idl "$in"
 
@@ -96,6 +100,7 @@ mirror "java" "$temp_out/java" "$java_out"
 mirror "jni" "$temp_out/jni" "$jni_out"
 mirror "objc" "$temp_out/objc" "$objc_out"
 mirror "nodejs" "$temp_out/nodejs" "$nodejs_out"
+mirror "react-native" "$temp_out/react-native" "$react_out"
 
 date > "$gen_stamp"
 

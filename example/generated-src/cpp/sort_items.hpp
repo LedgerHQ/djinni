@@ -4,6 +4,7 @@
 #ifndef DJINNI_GENERATED_SORT_ITEMS_HPP
 #define DJINNI_GENERATED_SORT_ITEMS_HPP
 
+#include <cstdint>
 #include <memory>
 
 namespace textsort {
@@ -23,6 +24,8 @@ public:
 
     /** For the localhost / command-line demo */
     static ItemList run_sort(const ItemList & items);
+
+    virtual int32_t count() = 0;
 };
 
 }  // namespace textsort

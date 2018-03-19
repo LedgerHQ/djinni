@@ -11,6 +11,8 @@ import javax.annotation.Nonnull;
     /** For the iOS / Android demo */
     public void sort(@Nonnull SortOrder order, @Nonnull ItemList items);
 
+    public abstract int count();
+
     @CheckForNull
     public static SortItems createWithListener(@CheckForNull TextboxListener listener)
     {
@@ -55,10 +57,20 @@ import javax.annotation.Nonnull;
         }
         private native void native_sort(long _nativeRef, SortOrder order, ItemList items);
 
+<<<<<<< HEAD
         @CheckForNull
         public static native SortItems createWithListener(@CheckForNull TextboxListener listener);
 
         @Nonnull
         public static native ItemList runSort(@Nonnull ItemList items);
+=======
+        @Override
+        public int count()
+        {
+            assert !this.destroyed.get() : "trying to use a destroyed object";
+            return native_count(this.nativeRef);
+        }
+        private native int native_count(long _nativeRef);
+>>>>>>> start adding react generation
     }
 }
