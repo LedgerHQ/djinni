@@ -81,6 +81,8 @@ fi
     --react-native-out "$temp_out/react-native" \
     --react-native-type-prefix RCT \
     --react-include-objc "../objc" \
+    --react-include-objc-impl "../../handwritten-src/objc" \
+    --react-native-objc-impl-suffix "Impl" \
     \
     --idl "$in"
 

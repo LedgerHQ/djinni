@@ -93,8 +93,10 @@ package object generatorTools {
                    nodeIdentStyle: NodeIdentStyle,
                    nodeFileIdentStyle: IdentConverter,
                    reactIncludeObjc: String,
+                   reactIncludeObjcImpl: String,
                    reactNativeOutFolder: Option[File],
                    reactNativeTypePrefix: String,
+                   reactNativeObjcImplSuffix: String,
                    traceMethodCalls: Boolean)
 
   def preComma(s: String) = {

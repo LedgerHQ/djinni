@@ -102,8 +102,10 @@ object Main {
     var nodeFileIdentStyleOptional: Option[IdentConverter] = None
     //React Native
     var reactIncludeObjc = ""
+    var reactIncludeObjcImpl = ""
     var reactNativeOutFolder: Option[File] = None
     var reactNativeTypePrefix: String = ""
+    var reactNativeObjcImplSuffix: String = ""
     val argParser = new scopt.OptionParser[Unit]("djinni") {
 
       def identStyle(optionName: String, update: IdentConverter => Unit) = {
@@ -248,8 +250,12 @@ object Main {
         .text("The output folder for React Native files (Generator disabled if unspecified)")
       opt[String]("react-include-objc").valueName("<prefix>").foreach(reactIncludeObjc = _)
         .text("The relative path from react-native-out to objc-out")
+      opt[String]("react-include-objc-impl").valueName("<prefix>").foreach(reactIncludeObjcImpl = _)
+        .text("The relative path from react-native-out to objc implementation directory")
       opt[String]("react-native-type-prefix").valueName("<pre>").foreach(reactNativeTypePrefix = _)
         .text("The prefix for React Native data types (usually two or three letters)")
+      opt[String]("react-native-objc-impl-suffix").valueName("<pre>").foreach(reactNativeObjcImplSuffix = _)
+        .text("The suffix for objc implementations")
       // Debug opt
       opt[Boolean]("trace").valueName("<enable>").foreach(x => traceMethodsCalls = x)
         .text("If true, CPP calls will be printed on standard output")
@@ -425,8 +431,10 @@ object Main {
           nodeIdentStyle,
           nodeFileIdentStyle,
           reactIncludeObjc,
+          reactIncludeObjcImpl,
           reactNativeOutFolder,
           reactNativeTypePrefix,
+          reactNativeObjcImplSuffix,
           traceMethodsCalls)
 
         try {

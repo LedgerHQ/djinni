@@ -62,13 +62,14 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       refs.find(c.ty)
     })
 
-    val objcInterface = s"${marshal.typename(ident, i)}"
-    val self = s"${spec.reactNativeTypePrefix}$objcInterface"
+    //if(i.ext.objc) s"${spec.reactNativeTypePrefix}$objcInterface${spec.reactNativeObjcImplSuffix}" else
+    val objcInterface = if(i.ext.objc) marshal.typename(ident, i) + spec.reactNativeObjcImplSuffix else marshal.typename(ident, i)
+    val self = spec.reactNativeTypePrefix + marshal.typename(ident, i)
     refs.header.add("#import <Foundation/Foundation.h>")
     refs.header.add("#import <React/RCTBridgeModule.h>")
 
     //Include
-    val pathToObjcImpl = s""""${spec.reactIncludeObjc}/${objcInterface}.h""""
+    val pathToObjcImpl = if(i.ext.objc) s""""${spec.reactIncludeObjcImpl}/${objcInterface}.h"""" else s""""${spec.reactIncludeObjc}/${objcInterface}.h""""
     refs.header.add(s"#import $pathToObjcImpl")
 
     def writeObjcFuncDecl(method: Interface.Method, w: IndentWriter) {
@@ -92,30 +93,33 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       writeDoc(w, doc)
       w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
       w.wl(s"@property (nonatomic, strong) $objcInterface *objcImpl;")
+      //w.wl("-(void)initObjcImpl;")
       w.wl("@end")
     })
 
     // Generate the implementation file for Interface
     refs.body.add("#import " + q(spec.reactNativeTypePrefix + marshal.headerName(ident)))
-    val implfileName = spec.reactNativeTypePrefix + bodyName(ident.name)
+    val implfileName = spec.reactNativeTypePrefix + idObjc.ty(ident.name) + ".m"
     writeObjcFile(implfileName, origin, refs.body, w => {
       w.wl
       w.wl(s"@implementation $self")
-      w.wl("//Init Objc implementation")
-      w.wl("-(void)initObjcImpl").braced {
-        w.wl(s"self.objcImpl = [[$objcInterface alloc] init];")
+      w.wl("//Export module")
+      w.wl(s"RCT_EXPORT_MODULE($self)")
+      w.wl
+      w.wl("-(instancetype)init").braced {
+        w.wl("self = [super init];")
+        w.wl("//Init Objc implementation")
+        w.wl("if(self)").braced {
+          w.wl(s"self.objcImpl = [[$objcInterface alloc] init];")
+        }
+        w.wl("return self;")
       }
 
-      w.wl("//Export module")
-      w.wl(s"RCT_EXPORT_MODULE();")
       for (m <- i.methods) {
         w.wl
         writeMethodDoc(w, m, idObjc.local)
         writeObjcFuncDecl(m, w)
         w.w(")").braced {
-          w.wl("if(!self.objcImpl)").braced {
-            w.wl("[self initObjcImpl];")
-          }
           w.wl
           //Construct call
           val ret = marshal.returnType(m.ret)
