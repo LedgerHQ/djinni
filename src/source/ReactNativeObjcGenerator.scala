@@ -123,16 +123,22 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           w.wl
           //Construct call
           val ret = marshal.returnType(m.ret)
+          val boxResult = if(m.ret.isDefined) marshal.toBox(m.ret.get.resolved) else false
           if(ret != "void") {
-            w.w("id result = ")
+            w.w("""id result = @{@"result" :""")
+            if(boxResult) w.w("@(")
           }
+
           w.w(s"[${if(m.static) objcInterface else "self.objcImpl"} ${idObjc.method(m.ident)}")
 
           m.params.foreach(p =>{
             val start = if(p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
             w.w(s"${start}:${idObjc.field(p.ident)}")
           })
-          w.wl("];")
+
+          if(ret != "void") {
+            if(boxResult) w.w("])};") else w.wl("]};")
+          } else w.wl("];")
 
           if(ret != "void") {
             w.wl("if(result)").braced {

@@ -151,6 +151,21 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
     f(tm, needRef)
   }
 
+  def toBox(tm: MExpr): Boolean = {
+    tm.base match {
+      case o =>
+        val boxing = o match {
+          case p: MPrimitive => true
+          case d: MDef => d.defType match {
+            case DEnum => true
+            case _ => false
+          }
+          case _ => false
+        }
+        boxing
+      case _ => false
+    }
+  }
   def toBoxedParamType(tm: MExpr): String = {
     val (name, needRef) = toObjcType(tm, true)
     name + (if(needRef) " *" else "")
