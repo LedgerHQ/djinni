@@ -72,7 +72,7 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
     case e: MExtern => List(ImportRef(e.objc.header))
     case p: MParam => List()
   }
-
+  /*
   def reactReferences(m: Meta, exclude: String = ""): Seq[SymbolReference] = m match {
     case d: MDef => d.defType match {
       case DEnum =>
@@ -86,6 +86,21 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
         List(ImportRef(q(spec.reactIncludeObjc + "/" + spec.objcIncludePrefix + headerName(d.name))))
     }
     case _ => references(m, exclude)
+  }
+  */
+  def reactReferences(m: Meta, exclude: String = ""): Seq[SymbolReference] = m match {
+      case d: MDef => d.defType match {
+        case DEnum =>
+          val objcEnumName = spec.objcIncludePrefix + idObjc.ty(d.name)
+          List(ImportRef(q(objcEnumName + ".h")))
+        case DInterface =>
+          val ext = d.body.asInstanceOf[Interface].ext
+          List(ImportRef(q(typename(d.name, d.body) + ".h")))
+        case DRecord =>
+          val r = d.body.asInstanceOf[Record]
+          List(ImportRef(q(spec.objcIncludePrefix + headerName(d.name))))
+      }
+      case _ => references(m, exclude)
   }
 
   def headerName(ident: String) = idObjc.ty(ident) + "." + spec.objcHeaderExt

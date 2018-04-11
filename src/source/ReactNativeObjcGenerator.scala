@@ -69,7 +69,8 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     refs.header.add("#import <React/RCTBridgeModule.h>")
 
     //Include
-    val pathToObjcImpl = if(i.ext.objc) s""""${spec.reactIncludeObjcImpl}/${objcInterface}.h"""" else s""""${spec.reactIncludeObjc}/${objcInterface}.h""""
+    //val pathToObjcImpl = if(i.ext.objc) s""""${spec.reactIncludeObjcImpl}/${objcInterface}.h"""" else s""""${spec.reactIncludeObjc}/${objcInterface}.h""""
+    val pathToObjcImpl = s""""${objcInterface}.h""""
     refs.header.add(s"#import $pathToObjcImpl")
 
     def writeObjcFuncDecl(method: Interface.Method, w: IndentWriter) {
