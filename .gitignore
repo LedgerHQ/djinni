@@ -1,3 +1,5 @@
+djinni.iml
+support-lib/out/
 .DS_Store
 .idea/
 **/.idea/workspace.xml
