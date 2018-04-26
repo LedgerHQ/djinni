@@ -116,6 +116,7 @@ class ScalaImplicitsGenerator(spec: Spec) extends Generator(spec) {
       case "I64" => "Long"
       case "I8" => "Byte"
       case "I16" => "Short"
+      case "Binary" => "Array[Byte]"
       case "ArrayList" => "Array"
       case others =>
         if (others.contains("<"))
