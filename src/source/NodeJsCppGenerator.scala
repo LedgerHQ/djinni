@@ -206,11 +206,22 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
         w.wl
         createWrapMethod(ident, i, w)
         w.wl
+        createCheckMethod(ident, i, w)
+        w.wl
         createInitializeMethod(ident, i, w)
       })
     }
   }
 
+  def createCheckMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
+    val baseClassName = marshal.typename(ident, i)
+    wr.w(s"NAN_METHOD($baseClassName::isNull)").braced {
+      wr.wl(s"$baseClassName* obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
+      wr.wl(s"auto cpp_implementation = obj->getCppImpl();")
+      wr.wl("auto isNull = !cpp_implementation ? true : false;")
+      wr.wl("return info.GetReturnValue().Set(Nan::New<Boolean>(isNull));")
+    }
+  }
   def createWrapMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
     val baseClassName = marshal.typename(ident, i)
     val cppClassName = cppMarshal.typename(ident, i)

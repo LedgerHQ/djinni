@@ -276,7 +276,26 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
         wr.wl(s"auto $converted = chrono::system_clock::time_point(chrono::milliseconds(time_$converted));")
       }
       case MBinary => toCppContainer("Array", binary = true)
-      case MOptional => toCppArgument(tm.args(0),converted, converting, wr)
+      case MOptional => {
+
+        val start = cppType.indexOf("<")
+        val end = cppType.length - (cppType.reverse.indexOf(">") + 1)
+        if(isInterface(tm.args(0))) {
+          wr.wl(s"std::shared_ptr<$nodeType> $converted = nullptr;")
+        } else {
+          wr.wl(s"auto $converted = ${spec.cppOptionalTemplate}<${cppType.substring(start + 1, end)}>();")
+        }
+
+        wr.wl(s"if(!$converting->IsNull())").braced {
+          toCppArgument(tm.args(0), s"opt_$converted", converting, wr)
+          if(isInterface(tm.args(0))) {
+            wr.wl(s"$converted = opt_$converted;")
+          } else {
+            wr.wl(s"$converted.emplace(opt_$converted);")
+          }
+        }
+        wr.wl
+      }
       case MList => toCppContainer("Array")
       case MSet => toCppContainer("Set")
       case MMap => toCppContainer("Map")

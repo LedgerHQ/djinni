@@ -124,6 +124,9 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         createNanNewMethod(ident, i, None, w)
         w.wl
         createInitializeMethod(ident, i, w)
+
+
+
       })
     }
   }
@@ -284,6 +287,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           w.wl
           if (!nodeMode) {
             //Implementation in C++
+            w.wl(s"static NAN_METHOD(isNull);")
             w.wl(s"$cpp_shared_ptr _$cppClassName;")
           } else {
             //Implementation in Node.js
@@ -440,6 +444,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         val cppClassName = cppMarshal.typename(ident, i)
         wr.wl("//Set object prototype")
         wr.wl(s"${cppClassName}_prototype.Reset(objectTemplate);")
+        wr.wl("Nan::SetPrototypeMethod(func_template,\"isNull\", isNull);")
       } else {
         wr.wl("Nan::SetPrototypeMethod(func_template,\"addRef\", addRef);")
         wr.wl("Nan::SetPrototypeMethod(func_template,\"removeRef\", removeRef);")
