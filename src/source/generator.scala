@@ -97,6 +97,7 @@ package object generatorTools {
                    reactNativeOutFolder: Option[File],
                    reactNativeTypePrefix: String,
                    reactNativeObjcImplSuffix: String,
+                   exportHeaderName: String,
                    traceMethodCalls: Boolean)
 
   def preComma(s: String) = {
@@ -358,7 +359,7 @@ abstract class Generator(spec: Spec)
     w.wl("} // end anonymous namespace")
   }
 
-  def writeHppFileGeneric(folder: File, namespace: String, fileIdentStyle: IdentConverter)(name: String, origin: String, includes: Iterable[String], fwds: Iterable[String], f: IndentWriter => Unit, f2: IndentWriter => Unit) {
+  def writeHppFileGeneric(folder: File, namespace: String, fileIdentStyle: IdentConverter)(name: String, origin: String, includes: Iterable[String], fwds: Iterable[String], f: IndentWriter => Unit, f2: IndentWriter => Unit, addExportHeader: Boolean = false) {
     createFile(folder, fileIdentStyle(name) + "." + spec.cppHeaderExt, (w: IndentWriter) => {
       var t = ""
       if (namespace.contains("djinni_generated"))
@@ -373,6 +374,18 @@ abstract class Generator(spec: Spec)
         w.wl
         includes.foreach(w.wl)
       }
+
+      if (addExportHeader) {
+        //MSVC BUILD: Include export header file so global data symbols will be exported in dll
+        w.wl(s"#ifndef ${spec.exportHeaderName.toUpperCase()}")
+        w.wl("    #if defined(_MSC_VER) && _MSC_VER <= 1900")
+        w.wl(s"       #include <${spec.exportHeaderName}.h>")
+        w.wl("    #else")
+        w.wl(s"       #define ${spec.exportHeaderName.toUpperCase()}")
+        w.wl("    #endif")
+        w.wl("#endif")
+      }
+
       w.wl
       wrapNamespace(w, namespace,
         (w: IndentWriter) => {
