@@ -83,15 +83,21 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
                 }
 
               } else {
-
-                var args: String = s"Handle<Value> args[$countArgs] = {"
-                for (i <- 0 to countArgs - 1) {
-                  args = s"${args}arg_$i"
-                  if (i < m.params.length - 1) {
-                    args = s"${args},"
+                //Windows complains about 0 sized arrays
+                val arraySize = if(countArgs == 0) 1 else countArgs
+                var args: String = s"Handle<Value> args[$arraySize"
+                if(countArgs > 0) {
+                  args = s"${args}] = {"
+                  for (i <- 0 to countArgs - 1) {
+                    args = s"${args}arg_$i"
+                    if (i < m.params.length - 1) {
+                      args = s"${args},"
+                    }
                   }
+                  w.wl(s"${args}};")
+                } else {
+                  w.wl(s"${args}];")
                 }
-                w.wl(s"${args}};")
 
                 //Get local from persistent
                 w.wl("Local<Object> local_njs_impl = Nan::New<Object>(njs_impl);")
