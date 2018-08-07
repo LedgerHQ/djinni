@@ -115,6 +115,13 @@ def isRecord(ty: MExpr): Boolean = {
   }
 }
 
+def isEnum(ty: MExpr): Boolean = {
+  ty.base match {
+    case d: MDef => d.defType == DEnum
+    case _ => false
+  }
+}
+
 def isOptionalInterface(ty: MExpr): Boolean = {
   ty.base == MOptional && ty.args.length == 1 && isInterface(ty.args.head)
 }
