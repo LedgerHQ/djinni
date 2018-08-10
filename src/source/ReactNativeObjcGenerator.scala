@@ -53,11 +53,133 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
 
   }
 
+
+  def reactInterfaceType(tm: MExpr) : String = tm.base match {
+    case MOptional => s"nullable ${reactInterfaceType(tm.args.head)}"
+    case MList => s"NSArray <${reactInterfaceType(tm.args.head)}> *"
+    case MSet => s"NSSet <${reactInterfaceType(tm.args.head)}> *"
+    case MMap => s"NSDictionary <${reactInterfaceType(tm.args.head)}> *"
+    case d: MDef =>
+      d.defType match {
+        case DInterface => "NSDictionary *"
+        case _ => ""
+      }
+    case _ => ""
+  }
+
+  def isExprInterface(tm: MExpr): Boolean = tm.base match {
+    case MOptional | MList | MSet | MMap => isExprInterface(tm.args.head)
+    case d: MDef =>
+      d.defType match {
+        case DInterface => true
+        case _ => false
+      }
+    case _ => false
+  }
+
+  def generateParams(p: Field): Option[(String, String)] = {
+    val localIdent = idObjc.local(p.ident)
+    val identity = idObjc.field(p.ident)
+    if (isExprInterface(p.ty.resolved)) {
+      Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdent")
+    } else {
+      Some(identity, s"(${marshal.paramType(p.ty)})$localIdent")
+    }
+  }
+  def generateInitMethod(wr : IndentWriter): Unit = {
+    wr.wl("-(instancetype)init").braced {
+      wr.wl("self = [super init];")
+      wr.wl("//Init Objc implementation")
+      wr.wl("if(self)").braced {
+        wr.wl(s"self.objcImplementations = [[NSMutableDictionary alloc] init];")
+      }
+      wr.wl("return self;")
+    }
+  }
+
+  def generateInitMethodForCallback(wr : IndentWriter): Unit = {
+    wr.wl("-(instancetype)initWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock) reject").braced {
+      wr.wl("self = [super init];")
+      wr.wl("if(self)").braced {
+        wr.wl(s"self.resolve = resolve;")
+        wr.wl(s"self.reject = reject;")
+      }
+      wr.wl("return self;")
+    }
+  }
+
+  /*
+  As always, we suppose that callbacks implement only one method: onCallback,
+  it has 2 arguments, in order, first one is result and second one error
+  */
+  def isCallbackInterface(ident: Ident, i: Interface): Boolean = {
+    if (marshal.typename(ident, i).contains("Callback")) {
+      i.methods.length == 1 && i.methods.filter(m => m.ident.name == "onCallback").length > 0 && i.methods.head.params.length == 2
+    } else {
+      false
+    }
+  }
+
+  //Allows to construct name of RCT classes (cpp or objc implemented interfaces)
+  def getRCTName(paramTypeName: String) : String  = {
+    if (paramTypeName.indexOf("id<") >= 0 && paramTypeName.indexOf(">") == paramTypeName.length - 1) {
+      paramTypeName.slice(paramTypeName.indexOf("<") + 1, paramTypeName.indexOf(">"))
+    } else {
+      paramTypeName
+    }
+  }
+
+  def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter): Unit = tm.base match {
+    case MOptional => toReactType(tm.args.head, converted, converting, wr)
+    case MList => {
+      wr.wl(s"NSMutableArray *$converted = [[NSMutableArray alloc] init];")
+      wr.wl(s"for (id ${converting}_elem in $converting)").braced {
+        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr)
+        wr.wl(s"[$converted addObject:${converted}_elem];")
+      }
+    }
+    case MSet => {
+      wr.wl(s"NSMutableSet *$converted = [[NSMutableSet alloc] init];")
+      wr.wl(s"NSArray *arrayFromSet_$converting = [$converting allObjects];")
+      wr.wl(s"for (id ${converting}_elem in arrayFromSet_$converting)").braced {
+        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr)
+        wr.wl(s"[$converted addObject:${converted}_elem];")
+      }
+    }
+    case MMap => {
+      wr.wl(s"NSMutableDictionary *$converted = [[NSMutableDictionary alloc] init];")
+      wr.wl(s"for (id ${converting}_key in $converting)").braced {
+        wr.wl(s"id ${converted}_value = [$converting objectForKey:${converted}_key];")
+        toReactType(tm.args.head, s"${converted}_value", s"${converting}_value", wr)
+        wr.wl(s"[$converted setObject:${converted}_value forKey:${converted}_key];")
+      }
+    }
+    case d: MDef =>
+      d.defType match {
+        case DInterface => {
+          wr.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
+          //Bridge is shortning prefix if it's starting with RCT
+          val prefix = "RCT"
+          val objcParamType = getRCTName(marshal.typename(tm))
+          val paramTypeName = spec.reactNativeTypePrefix + objcParamType
+          val moduleName = if (paramTypeName.indexOf(prefix) == 0) paramTypeName.substring(prefix.length) else paramTypeName
+          wr.wl(s"""$paramTypeName *rctImpl_$converting = ($paramTypeName *)[self.bridge moduleForName:@"$moduleName"];""")
+          wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:uuid];")
+          wr.wl(s"""NSDictionary *$converted = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+        }
+        case _ =>
+      }
+    case _ =>
+
+
+  }
+
   /**
     * Generate Interface
-    */
+    **/
   override def generateInterface(origin: String, ident: Ident, doc: Doc, typeParams: Seq[TypeParam], i: Interface) {
     val refs = new ReactNativeRefs()
+
     i.methods.map(m => {
       val addRCTHeader = true
       m.params.map(p => refs.find(p.ty, addRCTHeader))
@@ -67,6 +189,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       refs.find(c.ty)
     })
 
+    val callbackInterface = isCallbackInterface(ident, i)
     val objcInterface = if(i.ext.objc) marshal.typename(ident, i) + spec.reactNativeObjcImplSuffix else marshal.typename(ident, i)
     val self = spec.reactNativeTypePrefix + marshal.typename(ident, i)
     refs.header.add("#import <Foundation/Foundation.h>")
@@ -77,34 +200,37 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     refs.header.add(s"#import $pathToObjcImpl")
 
     def writeObjcFuncDecl(method: Interface.Method, w: IndentWriter) {
-      val ret = marshal.returnType(method.ret)
-      val hasOnlyCallback = method.params.length == 1 && (marshal.paramType(method.params(0).ty).contains("callback") || marshal.paramType(method.params(0).ty).contains("Callback"))
-      val hasNoParams = method.params.length == 0 || hasOnlyCallback
-      if(method.params.length == 0 && ret == "void") {
-        w.wl(s"RCT_EXPORT_METHOD(${idObjc.method(method.ident)}")
+
+      //Special treatment for callbacks since we're using promises
+      if(callbackInterface) {
+        //We don't need to expose callbacks to React Native
+        val label = if (method.static) "+" else "-"
+        val ret = marshal.returnType(method.ret)
+        val decl = s"$label ($ret)${idObjc.method(method.ident)}"
+        writeAlignedObjcCall(w, decl, method.params, "", p => (idObjc.field(p.ident), s"(${marshal.paramType(p.ty)})${idObjc.local(p.ident)}"))
       } else {
-        val declEnd = s"""${if (!method.static) ":(NSDictionary *)currentInstance " else ""}""" + s"${if (hasNoParams) "" else "withParams"}"
-        val decl = s"RCT_REMAP_METHOD(${idObjc.method(method.ident)},${idObjc.method(method.ident)}${declEnd}"
-        writeAlignedReactNativeCall(w, decl, method.params, "", p => {
-          //No callbacks
-          if (!marshal.paramType(p.ty).contains("callback") && !marshal.paramType(p.ty).contains("Callback")) {
-            //TODO: case of containers with 'Interface' type
-            if (isInterface(p.ty.resolved) ) {
-              Some(idObjc.field(p.ident), s"(NSDictionary *)${idObjc.local(p.ident)}")
+        val ret = marshal.returnType(method.ret)
+        val hasOnlyCallback = method.params.length == 1 && (marshal.paramType(method.params(0).ty).contains("callback") || marshal.paramType(method.params(0).ty).contains("Callback"))
+        val hasNoParams = method.params.length == 0 || hasOnlyCallback
+        if(method.params.length == 0 && ret == "void") {
+          w.wl(s"RCT_EXPORT_METHOD(${idObjc.method(method.ident)}")
+        } else {
+          val declEnd = s"""${if (!method.static) ":(NSDictionary *)currentInstance " else ""}""" + s"${if (hasNoParams) "" else "withParams"}"
+          val decl = s"RCT_REMAP_METHOD(${idObjc.method(method.ident)},${idObjc.method(method.ident)}${declEnd}"
+          writeAlignedReactNativeCall(w, decl, method.params, "", p => {
+            //No callbacks
+            if (!marshal.paramType(p.ty).contains("callback") && !marshal.paramType(p.ty).contains("Callback")) {
+              generateParams(p)
             } else {
-              Some(idObjc.field(p.ident), s"(${marshal.paramType(p.ty)})${idObjc.local(p.ident)}")
+              None
             }
-          } else {
-            None
-          }
-        })
-        //TODO: set hasCallback
-        var hasCallback = false
-        method.params.foreach(p => hasCallback = hasCallback || marshal.paramType(p.ty).contains("callback") || marshal.paramType(p.ty).contains("Callback"))
-        //if(ret != "void" || hasCallback) {
+          })
+          //TODO: set hasCallback
+          var hasCallback = false
+          method.params.foreach(p => hasCallback = hasCallback || marshal.paramType(p.ty).contains("callback") || marshal.paramType(p.ty).contains("Callback"))
           val begin = if(hasNoParams) "WithResolver" else " withResolver"
           w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject")
-        //}
+        }
       }
     }
 
@@ -113,9 +239,16 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     writeObjcFile(fileName, origin, refs.header, w => {
       w.wl
       writeDoc(w, doc)
-      w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
-      w.wl(s"@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
-      w.wl("@end")
+      if(callbackInterface) {
+        w.wl(s"@interface $self : NSObject <${marshal.typename(ident, i)}, RCTBridgeModule>")
+        w.wl(s"@property (nonatomic, strong) RCTPromiseResolveBlock resolve;")
+        w.wl(s"@property (nonatomic, strong) RCTPromiseRejectBlock reject;")
+        w.wl("@end")
+      } else {
+        w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
+        w.wl(s"@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
+        w.wl("@end")
+      }
     })
 
     // Generate the implementation file for Interface
@@ -124,93 +257,99 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     writeObjcFile(implfileName, origin, refs.body, w => {
       w.wl
       w.wl(s"@implementation $self")
-      w.wl("//Export module")
-      w.wl(s"RCT_EXPORT_MODULE($self)")
-      w.wl
-      w.wl(s"@synthesize bridge = _bridge;")
-      w.wl
-      w.wl("-(instancetype)init").braced {
-        w.wl("self = [super init];")
-        w.wl("//Init Objc implementation")
-        w.wl("if(self)").braced {
-          w.wl(s"self.objcImplementations = [[NSMutableDictionary alloc] init];")
-        }
-        w.wl("return self;")
+      if(callbackInterface) {
+        w.wl("//Export module")
+        w.wl(s"RCT_EXPORT_MODULE($self)")
+        w.wl
+        w.wl(s"@synthesize bridge = _bridge;")
+        //Init method with resolver and rejecter
+        generateInitMethodForCallback(w)
+      } else {
+        w.wl("//Export module")
+        w.wl(s"RCT_EXPORT_MODULE($self)")
+        w.wl
+        w.wl(s"@synthesize bridge = _bridge;")
+        w.wl
+        generateInitMethod(w)
       }
 
       for (m <- i.methods) {
         w.wl
         writeMethodDoc(w, m, idObjc.local)
         writeObjcFuncDecl(m, w)
-        w.w(")").braced {
-          w.wl
+        w.w(s"${if (callbackInterface) "" else ")" }").braced {
 
           //Construct call
           val ret = marshal.returnType(m.ret)
           val boxResult = if (m.ret.isDefined) marshal.toBox(m.ret.get.resolved) else false
 
-          if (!m.static) {
-            //Get current Instance
-            w.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
-              w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::${idObjc.method(m.ident)}, first argument should be an instance of ${objcInterface}", nil);""")
+          if(callbackInterface) {
+            //Case param is itf or container of itfs
+            val resultParam = m.params(0).ty.resolved
+            val isParamInterface = isExprInterface(resultParam)
+            //Case of error
+            w.wl("if (error)").braced {
+              //Suppose that error has always a 'message' attribute
+              w.wl(s"""self.reject(@"$self Error", error.message, nil);""")
+            }
+            w.wl
+            //TODO: Handle Enums
+            if (isParamInterface) {
+              //Callback has result and callback args
+              toReactType(resultParam, "converted_result", "result", w)
+            }
+            w.wl
+            w.wl(s"self.resolve(${if (isParamInterface) "converted_result" else "result"});")
+          } else {
+
+            if (!m.static) {
+              //Get current Instance
+              w.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
+                w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::${idObjc.method(m.ident)}, first argument should be an instance of ${objcInterface}", nil);""")
+              }
+
+              w.wl(s"""${objcInterface} *currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+              w.wl("if (!currentInstanceObj)").braced {
+                w.wl(s"""NSString *error = [NSString stringWithFormat:@"Error while calling ${objcInterface}::${idObjc.method(m.ident)}, instance of uid %@ not found", currentInstance[@"uid"]];""")
+                w.wl(s"""reject(@"impl_call_error", error, nil);""")
+              }
             }
 
-            w.wl(s"""${objcInterface} *currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
-            w.wl("if (!currentInstanceObj)").braced {
-              w.wl(s"""NSString *error = [NSString stringWithFormat:@"Error while calling ${objcInterface}::${idObjc.method(m.ident)}, instance of uid %@ not found", currentInstance[@"uid"]];""")
-              w.wl(s"""reject(@"impl_call_error", error, nil);""")
-            }
-          }
+            //Retrieve from bridge if necessary
+            m.params.foreach(p =>{
+              if (isInterface(p.ty.resolved)) {
+                //TODO: check if parameters are having "type" and "uid" fields
+                //TODO: use toReactType
+                val index = m.params.indexOf(p)
+                //Bridge is shortning prefix if it's starting with RCT
+                val prefix = "RCT"
+                val paramTypeName = marshal.typename(p.ty)
+                val objcParamType = getRCTName(paramTypeName)
+                val rctParamType = spec.reactNativeTypePrefix + objcParamType
+                val finalObjcParamType = s"$paramTypeName${if (paramTypeName.indexOf("id<") >= 0) "" else " *"}"
+                w.wl(s"""$rctParamType *rctParam_${index} = ($rctParamType *)[self.bridge moduleForName:@"${if (rctParamType.indexOf(prefix) == 0) rctParamType.substring(prefix.length) else rctParamType}"];""")
+                w.wl(s"""${finalObjcParamType}objcParam_${index} = ($finalObjcParamType)[rctParam_${index}.objcImplementations objectForKey:${idObjc.field(p.ident)}[@"uid"]];""")
+                w.wl
+              }
+            })
 
-          //Allows to construct name of RCT classes (cpp or objc implemented interfaces)
-          def getRCTName(paramTypeName: String) : String  = {
-            if (paramTypeName.indexOf("id<") >= 0 && paramTypeName.indexOf(">") == paramTypeName.length - 1) {
-              paramTypeName.slice(paramTypeName.indexOf("<") + 1, paramTypeName.indexOf(">"))
-            } else {
-              paramTypeName
+            //Start calling Objective-C method
+            if (m.static || ret != "void") {
+              w.w(s"${marshal.fieldType(m.ret.get)} objcResult = ")
             }
-          }
-
-          //Retrieve from bridge if necessary
-          m.params.foreach(p =>{
-            if (isInterface(p.ty.resolved)) {
-              //TODO: check if parameters are having "type" and "uid" fields
+            w.w(s"[${if (m.static) objcInterface else "currentInstanceObj"} ${idObjc.method(m.ident)}")
+            //Parameter call
+            m.params.foreach(p =>{
               val index = m.params.indexOf(p)
-              //Bridge is shortning prefix if it's starting with RCT
-              val prefix = "RCT"
-              val paramTypeName = marshal.typename(p.ty)
-              val objcParamType = getRCTName(paramTypeName)
-              val rctParamType = spec.reactNativeTypePrefix + objcParamType
-              val finalObjcParamType = s"$paramTypeName${if (paramTypeName.indexOf("id<") >= 0) "" else " *"}"
-              w.wl(s"""$rctParamType *rctParam_${index} = ($rctParamType *)[self.bridge moduleForName:@"${if (rctParamType.indexOf(prefix) == 0) rctParamType.substring(prefix.length) else rctParamType}"];""")
-              w.wl(s"""${finalObjcParamType}objcParam_${index} = ($finalObjcParamType)[rctParam_${index}.objcImplementations objectForKey:${idObjc.field(p.ident)}[@"uid"]];""")
-              w.wl
-            }
-          })
+              val start = if (p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
+              val param = if (isInterface(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
+              w.w(s"${start}:${param}")
+            })
 
-          //Start calling Objective-C method
-          if (m.static || ret != "void") {
-            w.w(s"${marshal.fieldType(m.ret.get)} objcResult = ")
-          }
-          w.w(s"[${if (m.static) objcInterface else "currentInstanceObj"} ${idObjc.method(m.ident)}")
-          //Parameter call
-          m.params.foreach(p =>{
-            val index = m.params.indexOf(p)
-            val start = if (p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
-            val param = if (isInterface(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
-            w.w(s"${start}:${param}")
-          })
-
-          if(ret != "void") {
-            w.wl("];")
-            //Add to implementations
-            if (m.ret.isDefined && isInterface(m.ret.get.resolved)) {
-              w.wl
-              w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
-              if (objcInterface == ret) {
-                //Generate a UID
-                w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
-              } else {
+            if(ret != "void") {
+              w.wl("];")
+              //Add to implementations
+              if (m.ret.isDefined && isInterface(m.ret.get.resolved)) {
                 //Check if it's a platform specific implementation (i.e. extCpp = true)
                 //This check should rely on a more robust test, go through idls and find corresponding interface and test ?
                 val paramTypeName = marshal.typename(m.ret.get)
@@ -218,39 +357,51 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
                 val rctReturn = spec.reactNativeTypePrefix + objcParamType
                 //Bridge is shortning prefix if it's starting with RCT
                 val prefix = "RCT"
-                w.wl(s""" $rctReturn *rctImpl = ($rctReturn *)[self.bridge moduleForName:@"${if (rctReturn.indexOf(prefix) == 0) rctReturn.substring(prefix.length) else rctReturn}"];""")
-                w.wl("[rctImpl.objcImplementations setObject:objcResult forKey:uuid];")
-              }
-              w.wl
-              //Construct result
-              w.wl(s"""NSDictionary *result = @{@"type" : @"${marshal.typename(m.ret.get)}", @"uid" : uuid };""")
-            } else {
-              w.w("""NSDictionary *result = @{@"value" : """)
-              if (boxResult) {
-                w.w("@(")
-              }
-              w.w("objcResult")
-              if (boxResult) {
-                w.w(")")
-              }
-              w.w("};")
-            }
+                val moduleName = if (rctReturn.indexOf(prefix) == 0) rctReturn.substring(prefix.length) else rctReturn
+                w.wl
+                w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
+                if (objcInterface == ret) {
+                  //Generate a UID
+                  w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
+                } else {
 
-            w.wl
-            w.wl("if(result)").braced {
-              w.wl("resolve(result);")
-            }
-            w.wl("else").braced {
-              //Send a null NSError object for the moment
-              w.wl(s"""reject(@"impl_call_error", @"Error while calling ${objcInterface}::${idObjc.method(m.ident)}", nil);""")
-            }
-          } else w.wl("];")
+                  w.wl(s""" $rctReturn *rctImpl = ($rctReturn *)[self.bridge moduleForName:@"$moduleName"];""")
+                  w.wl("[rctImpl.objcImplementations setObject:objcResult forKey:uuid];")
+                }
+                w.wl
+                //Construct result
+                w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+              } else {
+                w.w("""NSDictionary *result = @{@"value" : """)
+                if (boxResult) {
+                  w.w("@(")
+                }
+                w.w("objcResult")
+                if (boxResult) {
+                  w.w(")")
+                }
+                w.w("};")
+              }
+
+              w.wl
+              w.wl("if(result)").braced {
+                w.wl("resolve(result);")
+              }
+              w.wl("else").braced {
+                //Send a null NSError object for the moment
+                w.wl(s"""reject(@"impl_call_error", @"Error while calling ${objcInterface}::${idObjc.method(m.ident)}", nil);""")
+              }
+            } else w.wl("];")
+          }
+          w.wl
         }
       }
       w.wl("@end")
     })
 
   }
+
+
 
   override def generateRecord(origin: String, ident: Ident, doc: Doc, params: Seq[TypeParam], r: Record) {
     val refs = new ReactNativeRefs()
@@ -275,13 +426,10 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       writeDoc(w, doc)
       w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
       w.wl(s"@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
-      w.wl
       w.wl("@end")
     })
 
-
     // Generate the implementation file for record
-    //bodyName(self)
     val implfileName = spec.reactNativeTypePrefix + marshal.typename(ident, r) + ".m"
     writeObjcFile(implfileName, origin, refs.body, w => {
       if (r.consts.nonEmpty) generateObjcConstants(w, r.consts, noBaseSelf, ObjcConstantType.ConstVariable)
@@ -296,11 +444,17 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl
       w.wl(s"@synthesize bridge = _bridge;")
 
+      generateInitMethod(w)
+
       // Constructor from all fields (not copying)
       val init = s"RCT_REMAP_METHOD(init, init$firstInitializerArg"
-
-      writeAlignedObjcCall(w, init, r.fields, "", f => (idObjc.field(f.ident), s"(${marshal.paramType(f.ty)})${idObjc.local(f.ident)}"))
-      w.w(")")
+      writeAlignedReactNativeCall(w, init, r.fields, "", f => {
+        generateParams(f)
+      })
+      val begin = if(r.fields.length == 0) "WithResolver" else " withResolver"
+      w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)")
+      w.wl("{")
+      w.wl("}")
       w.wl
       w.wl("@end")
     })
