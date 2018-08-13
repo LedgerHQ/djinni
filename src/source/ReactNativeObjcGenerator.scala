@@ -61,7 +61,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     case MMap => s"NSDictionary <${reactInterfaceType(tm.args.head)}> *"
     case d: MDef =>
       d.defType match {
-        case DInterface => "NSDictionary *"
+        case DInterface | DRecord => "NSDictionary *"
         case _ => ""
       }
     case _ => ""
@@ -77,6 +77,16 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     case _ => false
   }
 
+  def isExprRecord(tm: MExpr): Boolean = tm.base match {
+    case MOptional | MList | MSet | MMap => isExprRecord(tm.args.head)
+    case d: MDef =>
+      d.defType match {
+        case DRecord => true
+        case _ => false
+      }
+    case _ => false
+  }
+
   def isBinary(tm: MExpr): Boolean = tm.base match {
     case MBinary => true
     case _ => false
@@ -85,7 +95,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
   def generateParams(p: Field): Option[(String, String)] = {
     val localIdent = idObjc.local(p.ident)
     val identity = idObjc.field(p.ident)
-    if (isExprInterface(p.ty.resolved)) {
+    if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
       Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdent")
     } else {
       Some(identity, s"(${marshal.paramType(p.ty)})$localIdent")
@@ -103,7 +113,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
   }
 
   def generateInitMethodForCallback(wr : IndentWriter, isDeclaration: Boolean = false): Unit = {
-    val decl = "-(instancetype)initWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock) reject"
+    val decl = "-(instancetype)initWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock) reject andBridge: (RCTBridge *) bridge"
     if (isDeclaration) {
       wr.wl(s"$decl;")
     } else {
@@ -112,6 +122,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         wr.wl("if(self)").braced {
           wr.wl(s"self.resolve = resolve;")
           wr.wl(s"self.reject = reject;")
+          wr.wl(s"self.bridge = bridge;")
         }
         wr.wl("return self;")
       }
@@ -166,7 +177,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     }
     case d: MDef =>
       d.defType match {
-        case DInterface => {
+        case DInterface | DRecord => {
           wr.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
           //Bridge is shortning prefix if it's starting with RCT
           val prefix = "RCT"
@@ -209,7 +220,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     }
     case d: MDef =>
       d.defType match {
-        case DInterface => {
+        case DInterface | DRecord => {
           //Bridge is shortning prefix if it's starting with RCT
           val prefix = "RCT"
           val paramTypeName = marshal.typename(tm)
@@ -273,10 +284,6 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
             None
           }
         })
-        //TODO: set hasCallback
-        var hasCallback = false
-        method.params.foreach(p => hasCallback = hasCallback || marshal.paramType(p.ty).contains("callback") || marshal.paramType(p.ty).contains("Callback"))
-
         val begin = if(hasNoParams) "WithResolver" else " withResolver"
         w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject")
       }
@@ -288,9 +295,10 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl
       writeDoc(w, doc)
       if(callbackInterface) {
-        w.wl(s"@interface $self : NSObject <${marshal.typename(ident, i)}, RCTBridgeModule>")
+        w.wl(s"@interface $self : NSObject <${marshal.typename(ident, i)}>")
         w.wl(s"@property (nonatomic, strong) RCTPromiseResolveBlock resolve;")
         w.wl(s"@property (nonatomic, strong) RCTPromiseRejectBlock reject;")
+        w.wl(s"@property (nonatomic, weak) RCTBridge *bridge;")
         val isDeclaration = true
         generateInitMethodForCallback(w, isDeclaration)
         w.wl("@end")
@@ -308,11 +316,6 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl
       w.wl(s"@implementation $self")
       if(callbackInterface) {
-        w.wl("//Export module")
-        w.wl(s"RCT_EXPORT_MODULE($self)")
-        w.wl
-        w.wl(s"@synthesize bridge = _bridge;")
-        //Init method with resolver and rejecter
         generateInitMethodForCallback(w)
       } else {
         w.wl("//Export module")
@@ -339,6 +342,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
             //Case param is itf or container of itfs
             val resultParam = m.params(0).ty.resolved
             val isParamInterface = isExprInterface(resultParam)
+            val isParamRecord = isExprRecord(resultParam)
             //Case of error
             w.wl("if (error)").braced {
               //Suppose that error has always a 'message' attribute
@@ -346,12 +350,12 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
             }
             w.wl
             //TODO: Handle Enums
-            if (isParamInterface) {
+            if (isParamInterface || isParamRecord) {
               //Callback has result and callback args
               toReactType(resultParam, "converted_result", "result", w)
             }
             w.wl
-            w.wl(s"self.resolve(${if (isParamInterface) "converted_result" else "result"});")
+            w.wl(s"self.resolve(${if (isParamInterface || isParamRecord) "converted_result" else "result"});")
           } else {
 
             if (!m.static) {
@@ -369,7 +373,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
 
             //Retrieve from bridge if necessary
             m.params.foreach(p =>{
-              if (isInterface(p.ty.resolved)) {
+              if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
                 val index = m.params.indexOf(p)
                 //Bridge is shortning prefix if it's starting with RCT
                 val prefix = "RCT"
@@ -379,13 +383,10 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
                 val finalObjcParamType = s"$paramTypeName${if (paramTypeName.indexOf("id<") >= 0) "" else " *"}"
                 if (paramTypeName.contains("Callback")) {
                   //Construct RCT callback from resolver and rejecter
-                  w.wl(s"$rctParamType *objcParam_${index} = [[$rctParamType alloc] initWithResolver:resolve rejecter:reject];")
+                  w.wl(s"$rctParamType *objcParam_${index} = [[$rctParamType alloc] initWithResolver:resolve rejecter:reject andBridge:self.bridge];")
                 } else {
                   //TODO: check if parameters are having "type" and "uid" fields
-                  //TODO: use toReactType
-                  w.wl(s"""$rctParamType *rctParam_${index} = ($rctParamType *)[self.bridge moduleForName:@"${if (rctParamType.indexOf(prefix) == 0) rctParamType.substring(prefix.length) else rctParamType}"];""")
-                  w.wl(s"""${finalObjcParamType}objcParam_${index} = ($finalObjcParamType)[rctParam_${index}.objcImplementations objectForKey:${idObjc.field(p.ident)}[@"uid"]];""")
-                  w.wl
+                  fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w)
                 }
               }
             })
@@ -399,14 +400,14 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
             m.params.foreach(p =>{
               val index = m.params.indexOf(p)
               val start = if (p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
-              val param = if (isInterface(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
+              val param = if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
               w.w(s"${start}:${param}")
             })
 
             if(ret != "void") {
               w.wl("];")
               //Add to implementations
-              if (m.ret.isDefined && isInterface(m.ret.get.resolved)) {
+              if (m.ret.isDefined && (isExprInterface(m.ret.get.resolved) || isExprRecord(m.ret.get.resolved))) {
                 //Check if it's a platform specific implementation (i.e. extCpp = true)
                 //This check should rely on a more robust test, go through idls and find corresponding interface and test ?
                 val paramTypeName = marshal.typename(m.ret.get)
@@ -416,18 +417,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
                 val prefix = "RCT"
                 val moduleName = if (rctReturn.indexOf(prefix) == 0) rctReturn.substring(prefix.length) else rctReturn
                 w.wl
-                w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
-                if (objcInterface == ret) {
-                  //Generate a UID
-                  w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
-                } else {
-
-                  w.wl(s""" $rctReturn *rctImpl = ($rctReturn *)[self.bridge moduleForName:@"$moduleName"];""")
-                  w.wl("[rctImpl.objcImplementations setObject:objcResult forKey:uuid];")
-                }
-                w.wl
-                //Construct result
-                w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+                toReactType(m.ret.get.resolved, "result", "objcResult", w)
               } else {
                 w.w("""NSDictionary *result = @{@"value" : """)
                 if (boxResult) {
@@ -533,14 +523,15 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         r.fields.map(f => {
           val id = r.fields.indexOf(f)
           val isInterface = isExprInterface(f.ty.resolved)
+          val isRecord = isExprRecord(f.ty.resolved)
           val fieldIdent = idObjc.field(f.ident)
-          if (isInterface) {
+          if (isInterface || isRecord) {
             fromReactType(f.ty.resolved, f.ident, s"convertedField_$id", fieldIdent, w)
           }
           //For reject condition
           val nullability = marshal.nullability(f.ty.resolved)
           if (!nullability.isDefined || nullability.get == "nonnull") {
-            val additionalCondition = if (isInterface) s"convertedField_$id" else fieldIdent
+            val additionalCondition = if (isInterface || isRecord) s"convertedField_$id" else fieldIdent
             if (rejectCondition.length == 0) {
               rejectCondition.concat(s"!$additionalCondition")
             } else {
@@ -561,10 +552,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         r.fields.map(f => {
           val id = r.fields.indexOf(f)
           val isInterface = isExprInterface(f.ty.resolved)
+          val isRecord = isExprRecord(f.ty.resolved)
           if (id != 0) {
             w.w(s"${idObjc.field(f.ident)}:")
           }
-          val arg = if (isInterface) s"convertedField_$id" else s"${idObjc.field(f.ident)}"
+          val arg = if (isInterface || isRecord) s"convertedField_$id" else s"${idObjc.field(f.ident)}"
           w.w(arg)
           if (id != r.fields.length - 1) {
             w.w(" ")
