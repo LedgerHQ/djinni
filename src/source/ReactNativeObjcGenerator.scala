@@ -77,6 +77,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     case _ => false
   }
 
+  def isBinary(tm: MExpr): Boolean = tm.base match {
+    case MBinary => true
+    case _ => false
+  }
+
   def generateParams(p: Field): Option[(String, String)] = {
     val localIdent = idObjc.local(p.ident)
     val identity = idObjc.field(p.ident)
@@ -224,7 +229,6 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     **/
   override def generateInterface(origin: String, ident: Ident, doc: Doc, typeParams: Seq[TypeParam], i: Interface) {
     val refs = new ReactNativeRefs()
-
     i.methods.map(m => {
       val addRCTHeader = true
       m.params.map(p => refs.find(p.ty, addRCTHeader))
@@ -319,7 +323,9 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         generateInitMethod(w)
       }
 
+      var hasFactoryMethod = false
       for (m <- i.methods) {
+        hasFactoryMethod = hasFactoryMethod || (m.static && m.ret.isDefined && marshal.paramType(m.ret.get).equals(marshal.typename(ident, i)))
         w.wl
         writeMethodDoc(w, m, idObjc.local)
         writeObjcFuncDecl(m, w)
@@ -427,7 +433,8 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
                 if (boxResult) {
                   w.w("@(")
                 }
-                w.w("objcResult")
+                val isRetBinary = isBinary(m.ret.get.resolved)
+                w.w(s"${if (isRetBinary) "objcResult.description" else "objcResult"}")
                 if (boxResult) {
                   w.w(")")
                 }
@@ -445,6 +452,23 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
             } else w.wl("];")
           }
           w.wl
+        }
+      }
+
+      //If no factory method, create a default one
+      if (!callbackInterface && !hasFactoryMethod && i.ext.objc) {
+        w.w(s"RCT_REMAP_METHOD(new, newWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+          w.wl(s"$objcInterface *objcResult = [[$objcInterface alloc] init];")
+          w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
+          w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
+          val prefix = "RCT"
+          val rctType = spec.reactNativeTypePrefix + objcInterface
+          val moduleName = if (rctType.indexOf(prefix) == 0) rctType.substring(prefix.length) else rctType
+          w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+          w.wl("if (!objcResult || !result)").braced {
+            w.wl(s"""reject(@"impl_call_error", @"Error while calling ${rctType}::init", nil);""")
+          }
+          w.wl("resolve(result);")
         }
       }
       w.wl("@end")
@@ -504,65 +528,62 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         generateParams(f)
       })
       val begin = if(r.fields.length == 0) "WithResolver" else " withResolver"
-      w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)")
-      w.wl("{")
-
-      var rejectCondition = ""
-      r.fields.map(f => {
-        val id = r.fields.indexOf(f)
-        val isInterface = isExprInterface(f.ty.resolved)
-        val fieldIdent = idObjc.field(f.ident)
-        if (isInterface) {
-          fromReactType(f.ty.resolved, f.ident, s"convertedField_$id", fieldIdent, w)
-        }
-        //For reject condition
-        val nullability = marshal.nullability(f.ty.resolved)
-        if (!nullability.isDefined || nullability.get == "nonnull") {
-          val additionalCondition = if (isInterface) s"convertedField_$id" else fieldIdent
-          if (rejectCondition.length == 0) {
-            rejectCondition.concat(s"!$additionalCondition")
-          } else {
-            rejectCondition.concat(s" || !$additionalCondition")
+      w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+        var rejectCondition = ""
+        r.fields.map(f => {
+          val id = r.fields.indexOf(f)
+          val isInterface = isExprInterface(f.ty.resolved)
+          val fieldIdent = idObjc.field(f.ident)
+          if (isInterface) {
+            fromReactType(f.ty.resolved, f.ident, s"convertedField_$id", fieldIdent, w)
+          }
+          //For reject condition
+          val nullability = marshal.nullability(f.ty.resolved)
+          if (!nullability.isDefined || nullability.get == "nonnull") {
+            val additionalCondition = if (isInterface) s"convertedField_$id" else fieldIdent
+            if (rejectCondition.length == 0) {
+              rejectCondition.concat(s"!$additionalCondition")
+            } else {
+              rejectCondition.concat(s" || !$additionalCondition")
+            }
+          }
+        })
+        w.wl
+        //Reject
+        if (rejectCondition.length > 0) {
+          w.wl(s"if ($rejectCondition)").braced {
+            w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::init", nil);""")
           }
         }
-      })
-      w.wl
-      //Reject
-      if (rejectCondition.length > 0) {
-        w.wl(s"if ($rejectCondition)").braced {
-          w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::init", nil);""")
+        w.wl
+        //Resolve
+        w.w(s"$objcInterface * finalResult = [[$objcInterface alloc] init$firstInitializerArg:")
+        r.fields.map(f => {
+          val id = r.fields.indexOf(f)
+          val isInterface = isExprInterface(f.ty.resolved)
+          if (id != 0) {
+            w.w(s"${idObjc.field(f.ident)}:")
+          }
+          val arg = if (isInterface) s"convertedField_$id" else s"${idObjc.field(f.ident)}"
+          w.w(arg)
+          if (id != r.fields.length - 1) {
+            w.w(" ")
+          }
+
+        })
+        w.w("];")
+        w.wl
+
+        w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
+        val prefix = "RCT"
+        val moduleName = if (self.indexOf(prefix) == 0) self.substring(prefix.length) else self
+        w.wl(s"""$self *rctImpl = ($self *)[self.bridge moduleForName:@"$moduleName"];""")
+        w.wl(s"[rctImpl.objcImplementations setObject:finalResult forKey:uuid];")
+        w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+        w.wl("if(result)").braced {
+          w.wl("resolve(result);")
         }
       }
-      w.wl
-      //Resolve
-      w.w(s"$objcInterface * finalResult = [[$objcInterface alloc] init$firstInitializerArg:")
-      r.fields.map(f => {
-        val id = r.fields.indexOf(f)
-        val isInterface = isExprInterface(f.ty.resolved)
-        if (id != 0) {
-          w.w(s"${idObjc.field(f.ident)}:")
-        }
-        val arg = if (isInterface) s"convertedField_$id" else s"${idObjc.field(f.ident)}"
-        w.w(arg)
-        if (id != r.fields.length - 1) {
-          w.w(" ")
-        }
-
-      })
-      w.w("];")
-      w.wl
-
-      w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
-      val prefix = "RCT"
-      val moduleName = if (self.indexOf(prefix) == 0) self.substring(prefix.length) else self
-      w.wl(s"""$self *rctImpl = ($self *)[self.bridge moduleForName:@"$moduleName"];""")
-      w.wl(s"[rctImpl.objcImplementations setObject:finalResult forKey:uuid];")
-      w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
-      w.wl("if(result)").braced {
-        w.wl("resolve(result);")
-      }
-
-      w.wl("}")
       w.wl
       w.wl("@end")
     })
