@@ -324,6 +324,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         w.wl(s"@synthesize bridge = _bridge;")
         w.wl
         generateInitMethod(w)
+        //Avoid all warnings due to this method
+        w.wl
+        w.wl("+ (BOOL)requiresMainQueueSetup").braced {
+          w.wl("return NO;")
+        }
       }
 
       var hasFactoryMethod = false
@@ -511,7 +516,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl(s"@synthesize bridge = _bridge;")
 
       generateInitMethod(w)
-
+      //Avoid all warnings due to this method
+      w.wl
+      w.wl("+ (BOOL)requiresMainQueueSetup").braced {
+        w.wl("return NO;")
+      }
       // Constructor from all fields (not copying)
       val init = s"RCT_REMAP_METHOD(init, init$firstInitializerArg"
       writeAlignedReactNativeCall(w, init, r.fields, "", f => {
