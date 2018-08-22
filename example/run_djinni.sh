@@ -77,7 +77,7 @@ fi
     --node-type-prefix NJS \
     --node-include-cpp "../cpp" \
     --node-package ledgerapp_nodejs \
-    --react-native-out "$temp_out/react-native" \
+    --react-native-objc-out "$temp_out/react-native" \
     --react-native-type-prefix RCT \
     --react-include-objc "../objc" \
     --react-include-objc-impl "../../handwritten-src/objc" \

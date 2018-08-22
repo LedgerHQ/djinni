@@ -50,7 +50,7 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
   override def toCpp(tm: MExpr, expr: String): String = throw new AssertionError("direct objc to cpp conversion not possible")
   override def fromCpp(tm: MExpr, expr: String): String = throw new AssertionError("direct cpp to objc conversion not possible")
 
-  def references(m: Meta, exclude: String = ""): Seq[SymbolReference] = m match {
+  def references(m: Meta): Seq[SymbolReference] = m match {
     case o: MOpaque =>
       List(ImportRef("<Foundation/Foundation.h>"))
     case d: MDef => d.defType match {
@@ -73,7 +73,7 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
     case p: MParam => List()
   }
 
-  def reactReferences(m: Meta, exclude: String = ""): Seq[SymbolReference] = m match {
+  def reactReferences(m: Meta): Seq[SymbolReference] = m match {
       case d: MDef => d.defType match {
         case DEnum =>
           val objcEnumName = spec.objcIncludePrefix + idObjc.ty(d.name)
@@ -85,7 +85,7 @@ class ObjcMarshal(spec: Spec) extends Marshal(spec) {
           val r = d.body.asInstanceOf[Record]
           List(ImportRef(q(spec.objcIncludePrefix + headerName(d.name))))
       }
-      case _ => references(m, exclude)
+      case _ => references(m)
   }
 
   def headerName(ident: String) = idObjc.ty(ident) + "." + spec.objcHeaderExt
