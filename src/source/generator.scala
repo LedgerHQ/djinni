@@ -94,9 +94,11 @@ package object generatorTools {
                    nodeFileIdentStyle: IdentConverter,
                    reactIncludeObjc: String,
                    reactIncludeObjcImpl: String,
-                   reactNativeOutFolder: Option[File],
+                   reactNativeObjcOutFolder: Option[File],
                    reactNativeTypePrefix: String,
                    reactNativeObjcImplSuffix: String,
+                   reactNativeJavaOutFolder: Option[File],
+                   reactNativeJavaPackage: Option[String],
                    exportHeaderName: String,
                    traceMethodCalls: Boolean)
 
@@ -269,11 +271,17 @@ package object generatorTools {
         }
         new NodeJsCppGenerator(spec).generate(idl)
       }
-      if (spec.reactNativeOutFolder.isDefined) {
+      if (spec.reactNativeObjcOutFolder.isDefined) {
         if (!spec.skipGeneration) {
-          createFolder("React-Native", spec.reactNativeOutFolder.get)
+          createFolder("React-Native-Objc", spec.reactNativeObjcOutFolder.get)
         }
         new ReactNativeObjcGenerator(spec).generate(idl)
+      }
+      if (spec.reactNativeJavaOutFolder.isDefined) {
+        if (!spec.skipGeneration) {
+          createFolder("React-Native-Java", spec.reactNativeJavaOutFolder.get)
+        }
+        new ReactNativeJavaGenerator(spec).generate(idl)
       }
       if (spec.yamlOutFolder.isDefined) {
         if (!spec.skipGeneration) {

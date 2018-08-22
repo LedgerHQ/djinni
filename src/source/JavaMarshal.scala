@@ -40,6 +40,25 @@ class JavaMarshal(spec: Spec) extends Marshal(spec) {
     case _ => List()
   }
 
+  def reactReferences(m: Meta): Seq[SymbolReference] = m match {
+      case d: MDef => d.defType match {
+        case DEnum =>
+         // val javaEnumName = s"${if(isReactMode) "" else s"${spec.javaPackage.get}." }${idJava.ty(d.name)}"
+          val javaEnumName = s"${spec.javaPackage.get}.${idJava.ty(d.name)}"
+          List(ImportRef(javaEnumName))
+        case DInterface =>
+          val ext = d.body.asInstanceOf[Interface].ext
+          val interfaceName = s"${spec.javaPackage.get}.${typename(d.name, d.body)}"
+          List(ImportRef(interfaceName))
+        case DRecord =>
+          val r = d.body.asInstanceOf[Record]
+          val recordName = s"${spec.javaPackage.get}.${idJava.ty(d.name)}"
+          List(ImportRef(recordName))
+      }
+      case _ => references(m)
+  }
+
+
   val interfaceNullityAnnotation = if (spec.cppNnType.nonEmpty) javaNonnullAnnotation else javaNullableAnnotation
 
   def nullityAnnotation(ty: Option[TypeRef]): Option[String] = ty.map(nullityAnnotation).getOrElse(None)
