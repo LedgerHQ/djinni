@@ -95,18 +95,27 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
   def generateParams(p: Field): Option[(String, String)] = {
     val localIdent = idObjc.local(p.ident)
     val identity = idObjc.field(p.ident)
+
     if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
       Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdent")
     } else {
-      Some(identity, s"(${marshal.paramType(p.ty)})$localIdent")
+      val paramType = marshal.paramType(p.ty)
+      val findIntType = """int\d+_t""".r
+      findIntType.findFirstIn(paramType) match {
+        case Some(_) => Some(identity, s"(int)$localIdent")
+        case None => Some(identity, s"($paramType)$localIdent")
+      }
     }
   }
-  def generateInitMethod(wr : IndentWriter): Unit = {
+  def generateInitMethod(wr : IndentWriter, hasOneFieldAsInterface: Boolean = false): Unit = {
     wr.wl("-(instancetype)init").braced {
       wr.wl("self = [super init];")
       wr.wl("//Init Objc implementation")
       wr.wl("if(self)").braced {
         wr.wl(s"self.objcImplementations = [[NSMutableDictionary alloc] init];")
+        if (hasOneFieldAsInterface) {
+          wr.wl(s"self.implementationsData = [[NSMutableDictionary alloc] init];")
+        }
       }
       wr.wl("return self;")
     }
@@ -193,29 +202,57 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     case _ =>
   }
 
-  def fromReactType(tm: MExpr, ident: Ident, converted: String, converting: String, wr: IndentWriter): Unit = tm.base match {
-    case MOptional => fromReactType(tm.args.head, ident, converted, converting, wr)
+  def fromReactType(tm: MExpr, ident: Ident, converted: String, converting: String, wr: IndentWriter, dataContainer: String = "", hasParentContainer: Boolean = false): Unit = tm.base match {
+    case MOptional => fromReactType(tm.args.head, ident, converted, converting, wr, dataContainer, hasParentContainer)
     case MList => {
       wr.wl(s"NSMutableArray *$converted = [[NSMutableArray alloc] init];")
+      wr.wl
+      if (dataContainer.length > 0) {
+        wr.wl(s"NSMutableArray *${converted}_data = [[NSMutableArray alloc] init];")
+        wr.wl
+      }
       wr.wl(s"for (id ${converting}_elem in $converting)").braced {
-        fromReactType(tm.args.head, ident, s"${converted}_elem", s"${converting}_elem", wr)
+        fromReactType(tm.args.head, ident, s"${converted}_elem", s"${converting}_elem", wr, s"${converted}_data", true)
         wr.wl(s"[$converted addObject:${converted}_elem];")
+        wr.wl
+      }
+      if (dataContainer.length > 0) {
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl
       }
     }
     case MSet => {
       wr.wl(s"NSMutableSet *$converted = [[NSMutableSet alloc] init];")
       wr.wl(s"NSArray *arrayFromSet_$converting = [$converting allObjects];")
+      wr.wl
+      if (dataContainer.length > 0) {
+        wr.wl(s"NSMutableArray *${converted}_data = [[NSMutableArray alloc] init];")
+        wr.wl
+      }
       wr.wl(s"for (id ${converting}_elem in arrayFromSet_$converting)").braced {
-        fromReactType(tm.args.head, ident, s"${converted}_elem", s"${converting}_elem", wr)
+        fromReactType(tm.args.head, ident, s"${converted}_elem", s"${converting}_elem", wr, s"${converted}_data", true)
         wr.wl(s"[$converted addObject:${converted}_elem];")
+      }
+      if (dataContainer.length > 0) {
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl
       }
     }
     case MMap => {
       wr.wl(s"NSMutableDictionary *$converted = [[NSMutableDictionary alloc] init];")
+      wr.wl
+      if (dataContainer.length > 0) {
+        wr.wl(s"NSMutableArray *${converted}_data = [[NSMutableArray alloc] init];")
+        wr.wl
+      }
       wr.wl(s"for (id ${converting}_key in $converting)").braced {
         wr.wl(s"id ${converted}_value = [$converting objectForKey:${converted}_key];")
-        fromReactType(tm.args.head, ident, s"${converted}_value", s"${converting}_value", wr)
+        fromReactType(tm.args.head, ident, s"${converted}_value", s"${converting}_value", wr, s"${converted}_data", true)
         wr.wl(s"[$converted setObject:${converted}_value forKey:${converted}_key];")
+      }
+      if (dataContainer.length > 0) {
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl
       }
     }
     case d: MDef =>
@@ -230,6 +267,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           val moduleName = if (rctParamType.indexOf(prefix) == 0) rctParamType.substring(prefix.length) else rctParamType
           wr.wl(s"""$rctParamType *rctParam_${converting} = ($rctParamType *)[self.bridge moduleForName:@"$moduleName"];""")
           wr.wl(s"""${finalObjcParamType}$converted = ($finalObjcParamType)[rctParam_${converting}.objcImplementations objectForKey:$converting[@"uid"]];""")
+          if (dataContainer.length > 0 && hasParentContainer) {
+            wr.wl(s"""[$dataContainer addObject:$converting[@"uid"]];""")
+          } else if (dataContainer.length > 0) {
+            wr.wl(s"""[$dataContainer setObject:$converting[@"uid"] forKey:@"$converted"];""")
+          }
         }
         case _ =>
       }
@@ -492,11 +534,16 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
 
     val firstInitializerArg = if(r.fields.isEmpty) "" else IdentStyle.camelUpper("with_" + r.fields.head.ident.name)
 
+    val hasOneFieldAsInterface = r.fields.filter(f => isExprInterface(f.ty.resolved) || isExprRecord(f.ty.resolved)).length > 0
+
     // Generate the header file for record
     writeObjcFile(fileName, origin, refs.header, w => {
       writeDoc(w, doc)
       w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
       w.wl(s"@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
+      if (hasOneFieldAsInterface) {
+        w.wl(s"@property (nonatomic, strong) NSMutableDictionary *implementationsData;")
+      }
       w.wl("@end")
     })
 
@@ -516,7 +563,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl
       w.wl(s"@synthesize bridge = _bridge;")
 
-      generateInitMethod(w)
+      generateInitMethod(w, hasOneFieldAsInterface)
       //Avoid all warnings due to this method
       w.wl
       w.wl("+ (BOOL)requiresMainQueueSetup").braced {
@@ -529,6 +576,11 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       })
       val begin = if(r.fields.length == 0) "WithResolver" else " withResolver"
       w.w(s"${begin}:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+        //Keep uuids of instances of interfaces and records
+
+        if (hasOneFieldAsInterface) {
+          w.wl(s"NSMutableDictionary *implementationsData = [[NSMutableDictionary alloc] init];")
+        }
         var rejectCondition = ""
         r.fields.map(f => {
           val id = r.fields.indexOf(f)
@@ -536,12 +588,13 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           val isRecord = isExprRecord(f.ty.resolved)
           val fieldIdent = idObjc.field(f.ident)
           if (isInterface || isRecord) {
-            fromReactType(f.ty.resolved, f.ident, s"convertedField_$id", fieldIdent, w)
+            fromReactType(f.ty.resolved, f.ident, s"field_$id", fieldIdent, w, "implementationsData")
+
           }
           //For reject condition
           val nullability = marshal.nullability(f.ty.resolved)
           if (!nullability.isDefined || nullability.get == "nonnull") {
-            val additionalCondition = if (isInterface || isRecord) s"convertedField_$id" else fieldIdent
+            val additionalCondition = if (isInterface || isRecord) s"field_$id" else fieldIdent
             if (rejectCondition.length == 0) {
               rejectCondition.concat(s"!$additionalCondition")
             } else {
@@ -566,7 +619,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           if (id != 0) {
             w.w(s"${idObjc.field(f.ident)}:")
           }
-          val arg = if (isInterface || isRecord) s"convertedField_$id" else s"${idObjc.field(f.ident)}"
+          val arg = if (isInterface || isRecord) s"field_$id" else s"${idObjc.field(f.ident)}"
           w.w(arg)
           if (id != r.fields.length - 1) {
             w.w(" ")
@@ -582,11 +635,70 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         w.wl(s"""$self *rctImpl = ($self *)[self.bridge moduleForName:@"$moduleName"];""")
         w.wl(s"[rctImpl.objcImplementations setObject:finalResult forKey:uuid];")
         w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
-        w.wl("if(result)").braced {
+        w.wl("if (result)").braced {
+          if (hasOneFieldAsInterface) {
+              w.wl(s"""[self.implementationsData setObject:implementationsData forKey:uuid];""")
+          }
           w.wl("resolve(result);")
         }
       }
       w.wl
+
+      //Getters attributes
+      def getterResult(ty: TypeRef, returnValue: String): String = {
+        val tyType = marshal.paramType(ty)
+        val findIntType = """int\d+_t""".r
+        findIntType.findFirstIn(tyType) match {
+          case Some(_) => s"@((int)$returnValue)"
+          case None => {
+            if (isEnum(ty.resolved)) {
+              s"@((int)$returnValue)"
+            } else if (tyType.equals("BOOL")) {
+              s"@($returnValue)"
+            } else {
+              returnValue
+            }
+          }
+        }
+      }
+
+      r.fields.map(f => {
+        val id = r.fields.indexOf(f)
+        val isFieldInterface = isExprInterface(f.ty.resolved)
+        val isFieldRecord = isExprRecord(f.ty.resolved)
+        val fieldIdent = idObjc.field(f.ident)
+        val suffix = fieldIdent.substring(0, 1).toUpperCase() + fieldIdent.substring(1)
+        //Getter
+        val getterName = s"get$suffix"
+        val fieldDecl = generateParams(f) match {
+          case Some((ident, decl)) => decl
+          case None => ""
+        }
+        w.wl(s"RCT_REMAP_METHOD($getterName, $getterName:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve)").braced {
+
+          val fieldTypeName = marshal.typename(f.ty.resolved)
+          val objcFieldType = getRCTName(fieldTypeName)
+          val reactFieldType = spec.reactNativeTypePrefix + objcFieldType
+          w.wl(s"""$objcInterface *objcImpl = ($objcInterface *)[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+
+          val fieldType = marshal.paramType(f.ty)
+          if (isFieldInterface || isFieldRecord) {
+            w.wl("""NSDictionary *data = (NSDictionary *)[self.implementationsData objectForKey:currentInstance[@"uid"]];""")
+            w.wl(s"""NSString *returnUuid = [data objectForKey:@"$fieldIdent"];""")
+            val prefix = "RCT"
+            val moduleFieldName = if (reactFieldType.indexOf(prefix) == 0) reactFieldType.substring(prefix.length) else reactFieldType
+            w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleFieldName", @"uid" : returnUuid };""")
+          } else {
+
+            val returnValue = s"objcImpl.$fieldIdent${if (isBinary(f.ty.resolved)) s".description" else ""}"
+            w.wl(s"""NSDictionary *result = @{@"value" : ${getterResult(f.ty, returnValue)}};""")
+          }
+
+          w.wl(s"resolve(result);")
+        }
+        w.wl
+      })
+
       w.wl("@end")
     })
   }
