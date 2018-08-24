@@ -216,6 +216,13 @@ package object generatorTools {
     }
   }
 
+  def getJavaImplementedInterfaces(idl: Seq[TypeDecl]) : Seq[String] = {
+    idl.collect { case itd: InternTypeDecl => itd }.filter(td => td.body match {
+      case i: Interface => i.ext.java
+      case _ => false
+    }).map(_.ident.name)
+  }
+
   def generate(idl: Seq[TypeDecl], spec: Spec): Option[String] = {
     try {
       if (spec.cppOutFolder.isDefined) {
@@ -281,7 +288,8 @@ package object generatorTools {
         if (!spec.skipGeneration) {
           createFolder("React-Native-Java", spec.reactNativeJavaOutFolder.get)
         }
-        new ReactNativeJavaGenerator(spec).generate(idl)
+        //Probably there is a more efficient way
+        new ReactNativeJavaGenerator(spec, getJavaImplementedInterfaces(idl)).generate(idl)
       }
       if (spec.yamlOutFolder.isDefined) {
         if (!spec.skipGeneration) {
