@@ -674,7 +674,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           case Some((ident, decl)) => decl
           case None => ""
         }
-        w.wl(s"RCT_REMAP_METHOD($getterName, $getterName:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve)").braced {
+        w.wl(s"RCT_REMAP_METHOD($getterName, $getterName:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)rejecter)").braced {
 
           val fieldTypeName = marshal.typename(f.ty.resolved)
           val objcFieldType = getRCTName(fieldTypeName)
