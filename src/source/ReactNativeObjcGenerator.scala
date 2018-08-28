@@ -26,7 +26,7 @@ import djinni.writer.IndentWriter
 import scala.collection.mutable
 import scala.collection.parallel.immutable
 
-class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
+class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends ObjcGenerator(spec) {
 
   class ReactNativeRefs() {
     var body = mutable.TreeSet[String]()
@@ -138,6 +138,35 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     }
   }
 
+  def generateReleaseMethod(wr : IndentWriter, objcInterface: String): Unit = {
+    wr.wl("RCT_REMAP_METHOD(release, release:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+      val rctItf = spec.reactNativeTypePrefix + objcInterface
+      wr.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
+        wr.wl(s"""reject(@"impl_call_error", @"Error while calling $rctItf::release, first argument should be an instance of $objcInterface", nil);""")
+      }
+      wr.wl("""[self.objcImplementations removeObjectForKey:currentInstance[@"uid"]];""")
+      wr.wl("resolve(@(YES));")
+    }
+  }
+
+  def generateLogInstancesMethod(wr : IndentWriter): Unit = {
+    wr.wl("RCT_REMAP_METHOD(log, logWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+      wr.wl("NSMutableArray *uuids = [[NSMutableArray alloc] init];")
+      wr.wl(s"for (id key in self.objcImplementations)").braced {
+        wr.wl("[uuids addObject:key];")
+      }
+      wr.wl("""NSDictionary *result = @{@"value" : uuids};""")
+      wr.wl("resolve(result);")
+    }
+  }
+
+  def generateFlushInstancesMethod(wr : IndentWriter): Unit = {
+    wr.wl("RCT_REMAP_METHOD(flush, flushWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+      wr.wl(s"[self.objcImplementations removeAllObjects];")
+      wr.wl("resolve(@(YES));")
+    }
+  }
+
   /*
   As always, we suppose that callbacks implement only one method: onCallback,
   it has 2 arguments, in order, first one is result and second one error
@@ -202,7 +231,7 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
     case _ =>
   }
 
-  def fromReactType(tm: MExpr, ident: Ident, converted: String, converting: String, wr: IndentWriter, dataContainer: String = "", hasParentContainer: Boolean = false): Unit = tm.base match {
+  def fromReactType(tm: MExpr, ident: Ident, converted: String, converting: String, wr: IndentWriter, dataContainer: String = "", hasParentContainer: Boolean = false, hasReturnValue: Boolean = true): Unit = tm.base match {
     case MOptional => fromReactType(tm.args.head, ident, converted, converting, wr, dataContainer, hasParentContainer)
     case MList => {
       wr.wl(s"NSMutableArray *$converted = [[NSMutableArray alloc] init];")
@@ -263,10 +292,23 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
           val paramTypeName = marshal.typename(tm)
           val objcParamType = getRCTName(paramTypeName)
           val rctParamType = spec.reactNativeTypePrefix + objcParamType
-          val finalObjcParamType = s"$paramTypeName${if (paramTypeName.indexOf("id<") >= 0) "" else " *"}"
+          val isObjcImplemented = objcInterfaces.contains(objcParamType.substring(idObjc.ty("").length))
+          val finalObjcParamType = s"$paramTypeName${if (isObjcImplemented) "" else " *"}"
           val moduleName = if (rctParamType.indexOf(prefix) == 0) rctParamType.substring(prefix.length) else rctParamType
           wr.wl(s"""$rctParamType *rctParam_${converting} = ($rctParamType *)[self.bridge moduleForName:@"$moduleName"];""")
           wr.wl(s"""${finalObjcParamType}$converted = ($finalObjcParamType)[rctParam_${converting}.objcImplementations objectForKey:$converting[@"uid"]];""")
+
+          //If resolver and rejecter not used by method (method without return type),
+          //we set resolver and rejecter on platform specific interfaces so we can use them
+          if (!hasReturnValue && isObjcImplemented) {
+            //Needs conversion to impl type
+            wr.wl(s"$objcParamType${spec.reactNativeObjcImplSuffix} *${converted}_objc = ($objcParamType${spec.reactNativeObjcImplSuffix} *)$converted;")
+            wr.wl(s"if (${converted}_objc)").braced {
+              wr.wl(s"${converted}_objc.resolve = resolve;")
+              wr.wl(s"${converted}_objc.reject = reject;")
+            }
+          }
+
           if (dataContainer.length > 0 && hasParentContainer) {
             wr.wl(s"""[$dataContainer addObject:$converting[@"uid"]];""")
           } else if (dataContainer.length > 0) {
@@ -371,6 +413,12 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
         w.wl("+ (BOOL)requiresMainQueueSetup").braced {
           w.wl("return NO;")
         }
+        //Release to remove objc instance from self.objcImplementations
+        generateReleaseMethod(w, marshal.typename(ident, i))
+        //Returns uid of all objc instances
+        generateLogInstancesMethod(w)
+        //Flush all objc intances from React Native Module's objcImplementations attribute
+        generateFlushInstancesMethod(w)
       }
 
       var hasFactoryMethod = false
@@ -428,13 +476,16 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
                 val paramTypeName = marshal.typename(p.ty)
                 val objcParamType = getRCTName(paramTypeName)
                 val rctParamType = spec.reactNativeTypePrefix + objcParamType
-                val finalObjcParamType = s"$paramTypeName${if (paramTypeName.indexOf("id<") >= 0) "" else " *"}"
+                val isObjcImplemented = objcInterfaces.contains(objcParamType.substring(idObjc.ty("").length))
+                val finalObjcParamType = s"$paramTypeName${if (isObjcImplemented) "" else " *"}"
                 if (paramTypeName.contains("Callback")) {
                   //Construct RCT callback from resolver and rejecter
                   w.wl(s"$rctParamType *objcParam_${index} = [[$rctParamType alloc] initWithResolver:resolve rejecter:reject andBridge:self.bridge];")
                 } else {
                   //TODO: check if parameters are having "type" and "uid" fields
-                  fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w)
+                  val dataContainer = ""
+                  val hasParentContainer = false
+                  fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w, dataContainer, hasParentContainer, ret != "void")
                 }
               }
             })
@@ -569,6 +620,14 @@ class ReactNativeObjcGenerator(spec: Spec) extends ObjcGenerator(spec) {
       w.wl("+ (BOOL)requiresMainQueueSetup").braced {
         w.wl("return NO;")
       }
+
+      //Release to remove objc instance from self.objcImplementations
+      generateReleaseMethod(w, marshal.typename(ident, r))
+      //Returns uid of all objc instances
+      generateLogInstancesMethod(w)
+      //Flush all objc intances from React Native Module's objcImplementations attribute
+      generateFlushInstancesMethod(w)
+
       // Constructor from all fields (not copying)
       val init = s"RCT_REMAP_METHOD(init, init$firstInitializerArg"
       writeAlignedReactNativeCall(w, init, r.fields, "", f => {
