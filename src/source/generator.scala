@@ -216,9 +216,15 @@ package object generatorTools {
     }
   }
 
-  def getJavaImplementedInterfaces(idl: Seq[TypeDecl]) : Seq[String] = {
+  def getPlatformSpecificInterfaces(idl: Seq[TypeDecl], platform: String) : Seq[String] = {
     idl.collect { case itd: InternTypeDecl => itd }.filter(td => td.body match {
-      case i: Interface => i.ext.java
+      case i: Interface => {
+        platform match {
+          case "java" => i.ext.java
+          case "objc" => i.ext.objc
+          case _ => false
+        }
+      }
       case _ => false
     }).map(_.ident.name)
   }
@@ -282,14 +288,14 @@ package object generatorTools {
         if (!spec.skipGeneration) {
           createFolder("React-Native-Objc", spec.reactNativeObjcOutFolder.get)
         }
-        new ReactNativeObjcGenerator(spec).generate(idl)
+        new ReactNativeObjcGenerator(spec, getPlatformSpecificInterfaces(idl, "objc")).generate(idl)
       }
       if (spec.reactNativeJavaOutFolder.isDefined) {
         if (!spec.skipGeneration) {
           createFolder("React-Native-Java", spec.reactNativeJavaOutFolder.get)
         }
         //Probably there is a more efficient way
-        new ReactNativeJavaGenerator(spec, getJavaImplementedInterfaces(idl)).generate(idl)
+        new ReactNativeJavaGenerator(spec, getPlatformSpecificInterfaces(idl, "java")).generate(idl)
       }
       if (spec.yamlOutFolder.isDefined) {
         if (!spec.skipGeneration) {
