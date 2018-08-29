@@ -246,7 +246,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         wr.wl
       }
       if (dataContainer.length > 0) {
-        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"${idJava.field(ident)}"];""")
         wr.wl
       }
     }
@@ -263,7 +263,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         wr.wl(s"[$converted addObject:${converted}_elem];")
       }
       if (dataContainer.length > 0) {
-        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"${idJava.field(ident)}"];""")
         wr.wl
       }
     }
@@ -280,7 +280,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         wr.wl(s"[$converted setObject:${converted}_value forKey:${converted}_key];")
       }
       if (dataContainer.length > 0) {
-        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"$converted"];""")
+        wr.wl(s"""[$dataContainer setObject:${converted}_data forKey:@"${idJava.field(ident)}"];""")
         wr.wl
       }
     }
@@ -312,7 +312,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           if (dataContainer.length > 0 && hasParentContainer) {
             wr.wl(s"""[$dataContainer addObject:$converting[@"uid"]];""")
           } else if (dataContainer.length > 0) {
-            wr.wl(s"""[$dataContainer setObject:$converting[@"uid"] forKey:@"$converted"];""")
+            wr.wl(s"""[$dataContainer setObject:$converting[@"uid"] forKey:@"${idJava.field(ident)}"];""")
           }
         }
         case _ =>
