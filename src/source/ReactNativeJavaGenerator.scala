@@ -48,11 +48,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         if (indexPackageStr == 0) {
           val interfaceName = arg.substring(spec.javaPackage.get.length + 1)
 
-          //Check for java implemented interfaces (but not callbacks)
-          //if (javaInterfaces.contains(interfaceName) && !interfaceName.contains("Callback")) {
-          //  java.add(s"$interfaceName${spec.reactNativeObjcImplSuffix}")
-          //}
-
           //Check if we need to import React Native modules
           if (importRCT && !isEnum(MExpr(m, List()))) {
             val rctImport = s"""${spec.reactNativeTypePrefix}$interfaceName"""
@@ -125,11 +120,11 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
   def generateLogInstancesMethod(wr : IndentWriter, javaItf: String): Unit = {
     wr.wl("@ReactMethod")
     wr.wl("public void log(Promise promise)").braced {
-      wr.wl("ArrayList<String> result = new ArrayList<String>();")
+      wr.wl("WritableNativeArray result = new WritableNativeArray();")
       wr.wl(s"for (Map.Entry<String, $javaItf> elem : this.javaObjects.entrySet())").braced {
-        wr.wl("""result.add(elem.getKey());""")
+        wr.wl("""result.pushString(elem.getKey());""")
       }
-      wr.wl("promise.resolve(0);")
+      wr.wl("promise.resolve(result);")
     }
   }
 
@@ -185,6 +180,35 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     }
   }
 
+  def appendMethod(tm : MExpr, prefixMethod: String): String = {
+    tm.base match {
+      case MList | MSet => s"${prefixMethod}Array"
+      case MMap => s"${prefixMethod}Map"
+      case d: MDef =>
+        d.defType match {
+          case DInterface | DRecord => s"${prefixMethod}Map"
+          case DEnum => s"${prefixMethod}String"
+        }
+      case p: MPrimitive => {
+        p.idlName match {
+          case "bool" => s"${prefixMethod}Boolean"
+          case "i64" | "f32" | "f64" => s"${prefixMethod}Double"
+          case "i8" | "i16" | "i32"  => s"${prefixMethod}Int"
+        }
+      }
+      case MString | MDate | MBinary => s"${prefixMethod}String"
+      case MOptional => appendMethod(tm.args.head, prefixMethod)
+      case _ => s"${prefixMethod}Int"
+    }
+  }
+  def pushMethod(tm: MExpr): String = {
+    appendMethod(tm, "push")
+  }
+
+  def putMethod(tm: MExpr): String = {
+    appendMethod(tm, "put")
+  }
+
   def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter, isJavaImplemented: Boolean = false): Unit = {
     //Get types
     val paramType = if(tm.args.length > 0) marshal.typename(tm.args.head) else ""
@@ -192,17 +216,17 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     tm.base match {
       case MOptional => toReactType(tm.args.head, converted, converting, wr, isJavaImplemented)
       case MList => {
-        wr.wl(s"ArrayList<$reactParamType> $converted = new ArrayList<$reactParamType>();")
+        wr.wl(s"WritableNativeArray $converted = new WritableNativeArray();")
         wr.wl(s"for ($paramType ${converting}_elem : $converting)").braced {
           toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isJavaImplemented)
-          wr.wl(s"$converted.add(${converted}_elem);")
+          wr.wl(s"$converted.${pushMethod(tm.args.head)}(${converted}_elem);")
         }
       }
       case MSet => {
-        wr.wl(s"Set<$reactParamType> $converted = new HashSet<$reactParamType>();")
+        wr.wl(s"WritableNativeArray $converted = new WritableNativeArray();")
         wr.wl(s"for ($paramType ${converting}_elem : arrayFromSet_$converting)").braced {
           toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isJavaImplemented)
-          wr.wl(s"$converted.put(${converted}_elem);")
+          wr.wl(s"$converted.${pushMethod(tm.args.head)}(${converted}_elem);")
         }
       }
       case MMap => {
@@ -210,12 +234,13 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         val reactKeyType = reactParamType
         val valueType = marshal.typename(tm.args(1))
         val reactValueType = getType(tm.args(1))
-        wr.wl(s"Map<$reactKeyType, $reactValueType> $converted = HashMap<$reactKeyType, $reactValueType> ();")
+        wr.wl(s"WritableNativeMap $converted = WritableNativeMap();")
         wr.wl(s"for (Map.Entry<$keyType, $valueType> ${converting}_elem : $converting)").braced {
           wr.wl(s"$keyType ${converted}_elem_key = ${converting}_elem.getKey();")
           wr.wl(s"$valueType ${converted}_elem_value = ${converting}_elem.getValue();")
           toReactType(tm.args.head, s"${converted}_elem_value", s"${converting}_elem_value", wr, isJavaImplemented)
-          wr.wl(s"$converted.put(${converted}_elem_key, ${converted}_elem_value);")
+          val putMethodStr = putMethod(tm.args(1))
+          wr.wl(s"$converted.${putMethodStr}(${converted}_elem_key, ${converted}_elem_value);")
         }
       }
       case d: MDef =>
@@ -228,9 +253,9 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
             //If Itf is Java implemented we need a cast here
             val finalConverting = if (isJavaImplemented) s"($javaParamType${spec.reactNativeObjcImplSuffix})$converting" else converting
             wr.wl(s"rctImpl_$converting.getJavaObjects().put(uuid, $finalConverting);")
-            wr.wl(s"""HashMap<String, String> $converted = new HashMap<String, String>();""")
-            wr.wl(s"""$converted.put("type","$paramTypeName");""")
-            wr.wl(s"""$converted.put("uid",uuid);""")
+            wr.wl(s"""WritableNativeMap $converted = new WritableNativeMap();""")
+            wr.wl(s"""$converted.putString("type","$paramTypeName");""")
+            wr.wl(s"""$converted.putString("uid",uuid);""")
           }
           case _ =>
         }
@@ -371,6 +396,83 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     })
   }
 
+  override def generate(idl: Seq[TypeDecl]): Unit = {
+
+    val packageName = spec.reactNativeTypePrefix + "BindingPackage"
+    super.generate(idl)
+    createFile(spec.reactNativeJavaOutFolder.get, packageName + ".java", (w: IndentWriter) => {
+      w.wl("// AUTOGENERATED FILE - DO NOT MODIFY!")
+      w.wl("// This file generated by Djinni")
+      w.wl
+      w.wl(s"package ${spec.reactNativeJavaPackage.get};")
+      w.wl("import java.util.Arrays;")
+      w.wl("import java.util.List;")
+      w.wl("import java.util.Collections;")
+      w.wl("import com.facebook.react.ReactPackage;")
+      w.wl("import com.facebook.react.bridge.NativeModule;")
+      w.wl("import com.facebook.react.bridge.ReactApplicationContext;")
+      w.wl("import com.facebook.react.uimanager.ViewManager;")
+      w.wl("import com.facebook.react.bridge.JavaScriptModule;")
+      w.wl
+
+      //Collect only itfs and records
+      val itfs = idl.collect { case td: InternTypeDecl => td }.collect { td => td.body match {
+        case Interface(_,_,_,_) | Record(_,_,_,_) => td
+      }}
+
+      w.wl(s"public class $packageName implements ReactPackage").braced {
+
+        w.wl("@Override")
+        w.wl("public List<NativeModule> createNativeModules(ReactApplicationContext reactContext)").braced {
+          w.w("return Arrays.<NativeModule>asList(")
+
+          itfs.foreach(td => {
+            val index = itfs.indexOf(td)
+            val itf = spec.reactNativeTypePrefix + marshal.typename(td.ident, td.body)
+            if (!itf.contains("Callback")) {
+              w.w(s"new $itf(reactContext)")
+              if(index != itfs.length - 1) {
+                w.w(",")
+                w.wl
+              }
+            }
+          })
+          w.w(");")
+        }
+        w.wl
+        w.wl("public List<Class<? extends JavaScriptModule>> createJSModules()").braced {
+          w.wl("return Collections.emptyList();")
+        }
+        w.wl
+        w.wl("@Override")
+        w.wl("public List<ViewManager> createViewManagers(ReactApplicationContext reactContext)").braced {
+          w.wl("return Collections.emptyList();")
+        }
+
+      }
+
+    });
+  }
+  
+  def addDefaultReferences(references: ReactNativeRefs): Unit = {
+    references.java.add("java.util.ArrayList")
+    references.java.add("java.util.HashMap")
+    references.java.add("java.util.HashSet")
+    references.java.add("java.util.Map")
+    references.java.add("java.util.Optional")
+    references.java.add("java.util.UUID")
+    references.java.add("java.text.DateFormat")
+    references.java.add("java.text.SimpleDateFormat")
+    references.java.add("java.util.Date")
+    references.java.add("com.facebook.react.bridge.ReactApplicationContext")
+    references.java.add("com.facebook.react.bridge.ReactContextBaseJavaModule")
+    references.java.add("com.facebook.react.bridge.ReactContext")
+    references.java.add("com.facebook.react.bridge.ReactMethod")
+    references.java.add("com.facebook.react.bridge.Promise")
+    references.java.add("com.facebook.react.bridge.WritableNativeMap")
+    references.java.add("com.facebook.react.bridge.WritableNativeArray")
+
+  }
   /**
     * Generate Interface
     **/
@@ -388,17 +490,10 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     val callbackInterface = isCallbackInterface(ident, i)
     val javaInterface = if(i.ext.java) marshal.typename(ident, i) + spec.reactNativeObjcImplSuffix else marshal.typename(ident, i)
     val self = spec.reactNativeTypePrefix + marshal.typename(ident, i)
-    refs.java.add("java.util.ArrayList")
-    refs.java.add("java.util.HashMap")
-    refs.java.add("java.util.HashSet")
-    refs.java.add("java.util.Map")
-    refs.java.add("java.util.Optional")
-    refs.java.add("java.util.UUID")
-    refs.java.add("com.facebook.react.bridge.ReactApplicationContext")
-    refs.java.add("com.facebook.react.bridge.ReactContextBaseJavaModule")
-    refs.java.add("com.facebook.react.bridge.ReactContext")
-    refs.java.add("com.facebook.react.bridge.ReactMethod")
-    refs.java.add("com.facebook.react.bridge.Promise")
+
+    //Add default imports (Maps, Arrays, ReactBrigde ...)
+    addDefaultReferences(refs)
+
     if (callbackInterface) {
       refs.java.add(s"${spec.javaPackage.get}.${marshal.typename(ident, i)}")
     } else {
@@ -428,7 +523,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           } else {
             w.wl("@ReactMethod")
 
-            //val methodIdent = if (m.static) s"public static void $currentMethodName(" else s"public void $currentMethodName($firstParam"
             val methodIdent = if (m.static) s"public void $currentMethodName(" else s"public void $currentMethodName($firstParam"
             writeAlignedReactNativeCall(w, methodIdent, m.params, "", p => {
               //No callbacks
@@ -521,8 +615,56 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                   w.wl
                   toReactType(m.ret.get.resolved, "result", "javaResult", w, javaInterfaces.contains(javaReturnType))
                 } else {
-                  w.wl(s"Map<String, $javaReturnType> result = new HashMap<String, $javaReturnType>();")
-                  w.wl("""result.put("value", javaResult);""")
+                  w.wl(s"WritableNativeMap result = new WritableNativeMap();")
+
+                  def getFinalResult(tm: MExpr, converting: String) : String = {
+                    val paramType = if(tm.args.length > 0) marshal.typename(tm.args.head) else ""
+                    tm.base match {
+                      case d: MDef =>
+                        d.defType match {
+                          case DEnum => {
+                            w.wl(s"String finalJavaResult = $converting.toString();")
+                            "finalJavaResult"
+                          }
+                          case _ => converting
+                        }
+                      case MDate => {
+                        w.wl("""DateFormat dateFormat = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss");""")
+                        w.wl(s"String finalJavaResult = dateFormat.format($converting);")
+                        "finalJavaResult"
+                      }
+                      case MBinary => {
+                        w.wl(s"String finalJavaResult = new String($converting);")
+                        "finalJavaResult"
+                      }
+                      case MOptional => getFinalResult(tm.args.head, converting)
+                      case MList | MSet => {
+                        val pushMethodStr = pushMethod(tm.args.head)
+                        w.wl(s"WritableNativeArray ${converting}_list = new WritableNativeArray();")
+                        w.wl(s"for($paramType ${converting}_elem : $converting)").braced {
+                          val convertedElem = getFinalResult(tm.args.head, s"${converting}_elem")
+                          w.wl(s"${converting}_list.${pushMethodStr}($convertedElem);")
+                        }
+                        s"${converting}_list"
+                      }
+                      case MMap => {
+                        val keyType = paramType
+                        val valueType = marshal.typename(tm.args(1))
+                        val putMethodStr = putMethod(tm.args.head)
+
+                        w.wl(s"WritableNativeMap ${converting}_map = new WritableNativeMap();")
+                        w.wl(s"for($keyType ${converting}_key : $converting.keySet())").braced {
+                          w.wl(s"$valueType ${converting}_elem_value = ${converting}.get(${converting}_key);")
+                          val convertedElem = getFinalResult(tm.args.head, s"${converting}_elem_value")
+                          w.wl(s"${converting}_map.${putMethodStr}(${converting}_key, $convertedElem);")
+                        }
+                        s"${converting}_map"
+                      }
+                      case _ => converting
+                    }
+                  }
+                  val finalJavaResult = getFinalResult(m.ret.get.resolved, "javaResult")
+                  w.wl(s"""result.${putMethod(m.ret.get.resolved)}("value", $finalJavaResult);""")
                 }
 
                 w.wl
@@ -567,6 +709,21 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
             w.wl(s"""return "$self";""")
           }
 
+          val paramTypeName = marshal.typename(ident, i)
+          if (javaInterfaces.contains(marshal.typename(ident, i))) {
+            //New method
+            w.wl(s"@ReactMethod")
+            w.wl(s"public void newInstance(Promise promise)").braced {
+              w.wl(s"$javaInterface newInstance = new $javaInterface(this.reactContext);")
+              w.wl("String uuid = UUID.randomUUID().toString();")
+              w.wl(s"this.javaObjects.put(uuid, newInstance);")
+              w.wl(s"""WritableNativeMap finalResult = new WritableNativeMap();""")
+              w.wl(s"""finalResult.putString("type","$self");""")
+              w.wl("""finalResult.putString("uid",uuid);""")
+              w.wl("promise.resolve(finalResult);")
+            }
+          }
+
           //Release to remove java instance from self.javaOjbects
           generateReleaseMethod(w, marshal.typename(ident, i))
           //Returns uid of all java instances
@@ -600,17 +757,8 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
 
     val hasOneFieldAsInterface = r.fields.filter(f => isExprInterface(f.ty.resolved) || isExprRecord(f.ty.resolved)).length > 0
 
-    refs.java.add("java.util.ArrayList")
-    refs.java.add("java.util.HashMap")
-    refs.java.add("java.util.HashSet")
-    refs.java.add("java.util.Map")
-    refs.java.add("java.util.Optional")
-    refs.java.add("java.util.UUID")
-    refs.java.add("com.facebook.react.bridge.ReactApplicationContext")
-    refs.java.add("com.facebook.react.bridge.ReactContextBaseJavaModule")
-    refs.java.add("com.facebook.react.bridge.ReactContext")
-    refs.java.add("com.facebook.react.bridge.ReactMethod")
-    refs.java.add("com.facebook.react.bridge.Promise")
+    addDefaultReferences(refs)
+
     refs.java.add(s"${spec.javaPackage.get}.${javaInterface}")
 
     writeJavaFile(ident, origin, refs.java, w => {
@@ -675,9 +823,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 w.wl(s"$rctParamType javaParam_${index} = rctParamType.initWithPromise(promise, this.reactContext);")
               } else {
                 fromReactType(f.ty.resolved, f.ident, s"javaParam_$index", idJava.field(f.ident), w, false, "implementationsData")
-                //if (hasOneFieldAsInterface && ) {
-                //  w.wl(s"""implementationsData.put("${idJava.field(f.ident)}", javaParam_$index);""")
-                //}
               }
             }
 
@@ -702,9 +847,9 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           w.wl("String uuid = UUID.randomUUID().toString();")
           val paramTypeName = spec.reactNativeTypePrefix + javaInterface
           w.wl(s"this.javaObjects.put(uuid, javaResult);")
-          w.wl(s"""Map<String, String> finalResult = new HashMap<String, String>();""")
-          w.wl(s"""finalResult.put("type","$paramTypeName");""")
-          w.wl("""finalResult.put("uid",uuid);""")
+          w.wl(s"""WritableNativeMap finalResult = new WritableNativeMap();""")
+          w.wl(s"""finalResult.putString("type","$paramTypeName");""")
+          w.wl("""finalResult.putString("uid",uuid);""")
           if (hasOneFieldAsInterface) {
             w.wl(s"this.implementationsData.put(uuid, implementationsData);")
           }
@@ -735,9 +880,13 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
               if (isFieldInterface || isFieldRecord) {
                 w.wl("Map<String, ArrayList<String>> data = this.implementationsData.get(uid);")
                 w.wl(s"""ArrayList<String> fieldData = data.get("$fieldIdent");""")
+                w.wl(s"WritableNativeArray nativeFieldData = new WritableNativeArray();")
+                w.wl(s"for (String elem : fieldData)").braced {
+                  w.wl(s"nativeFieldData.pushString(elem);")
+                }
                 //TODO: Check if returned value is container
-                w.wl("Map<String, ArrayList<String>> result = new HashMap<String, ArrayList<String>>();")
-                w.wl("""result.put(uid,fieldData);""")
+                w.wl("WritableNativeMap result = new WritableNativeMap();")
+                w.wl("""result.putArray(uid,nativeFieldData);""")
                 w.wl("promise.resolve(result);")
               } else {
                 w.wl(s"$javaFieldType result = javaObj.$getterName();")
