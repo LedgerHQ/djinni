@@ -443,6 +443,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             w.wl(s"if (${idObjc.field(errorParam.ident)})").braced {
               //Suppose that error has always a 'message' attribute
               w.wl(s"""self.reject(@"$self Error", ${idObjc.field(errorParam.ident)}.message, nil);""")
+              w.wl("return;")
             }
             w.wl
             //TODO: Handle Enums
@@ -546,7 +547,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
       //If no factory method, create a default one
       if (!callbackInterface && !hasFactoryMethod && i.ext.objc) {
-        w.w(s"RCT_REMAP_METHOD(new, newWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+        w.w(s"RCT_REMAP_METHOD(newInstance, newInstanceWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
           w.wl(s"$objcInterface *objcResult = [[$objcInterface alloc] init];")
           w.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
           w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
