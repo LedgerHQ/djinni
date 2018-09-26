@@ -519,12 +519,29 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 w.wl
                 toReactType(m.ret.get.resolved, "result", "objcResult", w)
               } else {
+
+                //If result is NSDate use NSDateFormatter
+                m.ret.get.resolved.base match {
+                  case MDate => {
+                    w.wl("NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];")
+                    w.wl("[dateFormatter setDateFormat:@\"YYYY-MM-dd HH:mm:ss\"];")
+                    w.wl("NSString *objcResultDate = [dateFormatter stringFromDate:objcResult];")
+                  }
+                  case _ =>
+                }
+
                 w.w("""NSDictionary *result = @{@"value" : """)
                 if (boxResult) {
                   w.w("@(")
                 }
-                val isRetBinary = isBinary(m.ret.get.resolved)
-                w.w(s"${if (isRetBinary) "objcResult.description" else "objcResult"}")
+
+                val objcResult = m.ret.get.resolved.base match {
+                  case MBinary => "objcResult.description"
+                  case MDate => "objcResultDate"
+                  case _ => "objcResult"
+                }
+                w.w(s"$objcResult")
+
                 if (boxResult) {
                   w.w(")")
                 }
