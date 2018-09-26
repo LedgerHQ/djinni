@@ -523,8 +523,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 //If result is NSDate use NSDateFormatter
                 m.ret.get.resolved.base match {
                   case MDate => {
-                    w.wl("NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];")
-                    w.wl("[dateFormatter setDateFormat:@\"YYYY-MM-dd HH:mm:ss\"];")
+                    w.wl("NSISO8601DateFormatter *dateFormatter = [[NSISO8601DateFormatter alloc] init];")
                     w.wl("NSString *objcResultDate = [dateFormatter stringFromDate:objcResult];")
                   }
                   case _ =>

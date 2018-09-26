@@ -304,6 +304,10 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
       case MBinary => {
         wr.wl(s"String $converted = $converting.toString();")
       }
+      case MDate => {
+        wr.wl(s"""DateFormat ${converting}DateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");""")
+        wr.wl(s"String $converted = ${converting}DateFormat.format($converting);")
+      }
       case d: MDef =>
         d.defType match {
           case DInterface | DRecord => {
@@ -755,7 +759,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                           case _ => converting
                         }
                       case MDate => {
-                        w.wl("""DateFormat dateFormat = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss");""")
+                        w.wl("""DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");""")
                         w.wl(s"String finalJavaResult = dateFormat.format($converting);")
                         "finalJavaResult"
                       }
@@ -1033,11 +1037,15 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 w.wl("""result.putArray(uid,nativeFieldData);""")
                 w.wl("promise.resolve(result);")
               } else {
-                w.wl(s"$javaFieldType result = javaObj.$getterName();")
+                val supportedFieldTypeName = javaFieldType match {
+                  case "long" => "double"
+                  case _ => javaFieldType
+                }
+                w.wl(s"$supportedFieldTypeName result = javaObj.$getterName();")
                 toReactType(f.ty.resolved, "converted_result", "result", w)
 
                 f.ty.resolved.base match {
-                    case MList | MSet | MMap => w.wl(s"promise.resolve(converted_result);")
+                    case MList | MSet | MMap | MDate => w.wl(s"promise.resolve(converted_result);")
                     case _ => w.wl(s"promise.resolve(result);")
                 }
               }
