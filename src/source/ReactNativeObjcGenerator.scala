@@ -521,24 +521,35 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               } else {
 
                 //If result is NSDate use NSDateFormatter
-                m.ret.get.resolved.base match {
+                def formatIfDate(tm: MExpr) : Unit = tm.base match {
                   case MDate => {
                     w.wl("NSISO8601DateFormatter *dateFormatter = [[NSISO8601DateFormatter alloc] init];")
                     w.wl("NSString *objcResultDate = [dateFormatter stringFromDate:objcResult];")
                   }
+                  case MOptional => formatIfDate(tm.args.head)
                   case _ =>
                 }
+                formatIfDate(m.ret.get.resolved)
 
                 w.w("""NSDictionary *result = @{@"value" : """)
                 if (boxResult) {
                   w.w("@(")
                 }
 
-                val objcResult = m.ret.get.resolved.base match {
+                def getObjcResult(tm: MExpr) : String = tm.base match {
+                  case p: MPrimitive => {
+                    marshal.fieldType(m.ret.get) match {
+                      case "NSNumber *" => "@([objcResult intValue])"
+                      case _ => "objcResult"
+                    }
+                  }
                   case MBinary => "objcResult.description"
                   case MDate => "objcResultDate"
+                  case MOptional => getObjcResult(tm.args.head)
                   case _ => "objcResult"
                 }
+                val objcResult = getObjcResult(m.ret.get.resolved)
+
                 w.w(s"$objcResult")
 
                 if (boxResult) {
