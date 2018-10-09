@@ -187,7 +187,20 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       paramTypeName
     }
   }
-  
+
+  //To find out if a type is supported as return type (from React Native side)
+  def isIntegerType(ty: TypeRef): Boolean = {
+    ty.resolved.base match {
+      case p: MPrimitive => {
+        p._idlName match {
+          case "i8" | "i16" | "i32" | "i64" => true
+          case _ => false
+        }
+      }
+      case _ => false
+    }
+  }
+
   def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter): Unit = tm.base match {
     case MOptional => toReactType(tm.args.head, converted, converting, wr)
     case MList => {
@@ -493,7 +506,9 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
             //Start calling Objective-C method
             if (m.static || ret != "void") {
-              w.w(s"${marshal.fieldType(m.ret.get)} objcResult = ")
+              val isIntType = isIntegerType(m.ret.get)
+              val fieldType = if (isIntType) "NSNumber *" else marshal.fieldType(m.ret.get)
+              w.w(s"$fieldType objcResult = ${if (isIntType) "[NSNumber numberWithLongLong:" else ""}")
             }
             w.w(s"[${if (m.static) objcInterface else "currentInstanceObj"} ${idObjc.method(m.ident)}")
             //Parameter call
@@ -504,10 +519,14 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               w.w(s"${start}:${param}")
             })
 
+            if (m.ret.isDefined && isIntegerType(m.ret.get)) {
+              w.w(s"]")
+            }
+
             w.wl("];")
-            if(ret != "void") {
+            if(m.ret.isDefined && ret != "void") {
               //Add to implementations
-              if (m.ret.isDefined && (isExprInterface(m.ret.get.resolved) || isExprRecord(m.ret.get.resolved))) {
+              if (isExprInterface(m.ret.get.resolved) || isExprRecord(m.ret.get.resolved)) {
                 //Check if it's a platform specific implementation (i.e. extCpp = true)
                 //This check should rely on a more robust test, go through idls and find corresponding interface and test ?
                 val paramTypeName = marshal.typename(m.ret.get)
@@ -532,13 +551,15 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 formatIfDate(m.ret.get.resolved)
 
                 w.w("""NSDictionary *result = @{@"value" : """)
-                if (boxResult) {
+                val isIntType = isIntegerType(m.ret.get)
+                val fieldType = if (isIntType) "NSNumber *" else marshal.fieldType(m.ret.get)
+                if (boxResult && !isIntType) {
                   w.w("@(")
                 }
 
                 def getObjcResult(tm: MExpr) : String = tm.base match {
                   case p: MPrimitive => {
-                    marshal.fieldType(m.ret.get) match {
+                    fieldType match {
                       case "NSNumber *" => "@([objcResult intValue])"
                       case _ => "objcResult"
                     }
@@ -552,7 +573,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
                 w.w(s"$objcResult")
 
-                if (boxResult) {
+                if (boxResult && !isIntType) {
                   w.w(")")
                 }
                 w.w("};")
