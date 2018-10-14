@@ -286,7 +286,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
           wr.wl(s"auto $converted = ${spec.cppOptionalTemplate}<${cppType.substring(start + 1, end)}>();")
         }
 
-        wr.wl(s"if(!$converting->IsNull())").braced {
+        wr.wl(s"if(!$converting->IsNull() && !$converting->IsUndefined())").braced {
           toCppArgument(tm.args(0), s"opt_$converted", converting, wr)
           if(isInterface(tm.args(0))) {
             wr.wl(s"$converted = opt_$converted;")
