@@ -507,8 +507,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             //Start calling Objective-C method
             if (m.static || ret != "void") {
               val isIntType = isIntegerType(m.ret.get)
-              val fieldType = if (isIntType) "NSNumber *" else marshal.fieldType(m.ret.get)
-              w.w(s"$fieldType objcResult = ${if (isIntType) "[NSNumber numberWithLongLong:" else ""}")
+              val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(m.ret.get)
+              w.w(s"$fieldType objcResult = ")
             }
             w.w(s"[${if (m.static) objcInterface else "currentInstanceObj"} ${idObjc.method(m.ident)}")
             //Parameter call
@@ -519,9 +519,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               w.w(s"${start}:${param}")
             })
 
-            if (m.ret.isDefined && isIntegerType(m.ret.get)) {
-              w.w(s"]")
-            }
 
             w.wl("];")
             if(m.ret.isDefined && ret != "void") {
@@ -552,8 +549,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
                 w.w("""NSDictionary *result = @{@"value" : """)
                 val isIntType = isIntegerType(m.ret.get)
-                val fieldType = if (isIntType) "NSNumber *" else marshal.fieldType(m.ret.get)
-                if (boxResult && !isIntType) {
+                val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(m.ret.get)
+                if (boxResult) {
                   w.w("@(")
                 }
 
@@ -573,7 +570,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
                 w.w(s"$objcResult")
 
-                if (boxResult && !isIntType) {
+                if (boxResult) {
                   w.w(")")
                 }
                 w.w("};")
