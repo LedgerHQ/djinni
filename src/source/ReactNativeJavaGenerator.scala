@@ -348,13 +348,19 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           wr.wl(s"ArrayList<String> ${converted}_data = new ArrayList<String>();")
           wr.wl
         }
-        //wr.wl(s"for ($reactParamType ${converting}_elem : $convertingCall)").braced {
         wr.wl(s"for (int i = 0; i <  $convertingCall.size(); i++)").braced {
-          wr.wl(s"$reactParamType ${converting}_elem = $convertingCall.${getMethod(tm.args(0))}(i)${if (isBinary(tm.args.head)) ".getBytes()" else ""};")
-          fromReactType(tm.args(0), ident, s"${converted}_elem", s"${converting}_elem", wr, false, s"${converted}_data", true)
+          //wr.wl(s"$reactParamType ${converting}_elem = $convertingCall.${getMethod(tm.args(0))}(i)${if (isBinary(tm.args.head)) ".getBytes()" else ""};")
+          if (isBinary(tm.args.head)) {
+            wr.wl(s"byte [] ${converting}_elem = new byte [$convertingCall.getArray(i).size()];")
+            wr.wl(s"for (int ${convertingCall}_i = 0; ${convertingCall}_i < $convertingCall.getArray(i).size(); ${convertingCall}_i++)").braced {
+              wr.wl(s"${converting}_elem[${convertingCall}_i] = (byte) $convertingCall.getArray(i).getDouble(${convertingCall}_i);")
+            }
+          } else {
+            wr.wl(s"$reactParamType ${converting}_elem = $convertingCall.${if (isBinary(tm.args.head)) "getArray" else getMethod(tm.args(0))}(i);")
+            fromReactType(tm.args(0), ident, s"${converted}_elem", s"${converting}_elem", wr, false, s"${converted}_data", true)
+          }
 
           val element = tm.args.head.base match {
-            //case MBinary => s"${converting}_elem.toString()"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem"
@@ -383,7 +389,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           fromReactType(tm.args(0), ident, s"${converted}_elem", s"${converting}_elem", wr, false, s"${converted}_data", true)
 
           val element = tm.args.head.base match {
-            //case MBinary => s"${converting}_elem.toString()"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem"
@@ -419,7 +424,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           fromReactType(tm.args(1), ident, s"${converted}_elem_value", s"${converting}_elem_value", wr, false, s"${converted}_data", true)
 
           val keyElement = tm.args(0).base match {
-            //case MBinary => s"${converting}_elem_key.toString()"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem_key"
@@ -429,7 +433,6 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           }
 
           val valueElement = tm.args(1).base match {
-            //case MBinary => s"${converting}_elem_value.toString()"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem_value"
