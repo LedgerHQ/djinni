@@ -201,6 +201,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
       case d: MDef =>
         d.defType match {
           case DInterface | DRecord => Some(identity, s"${reactInterfaceType(p.ty.resolved)} $localIdent")
+          case DEnum => Some(identity, s"int $localIdent")
           case _ => Some(identity, s"${marshal.paramType(p.ty)} $localIdent")
         }
       case _ => Some(identity, s"${marshal.paramType(p.ty)} $localIdent")
@@ -476,6 +477,15 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
             }
 
           }
+          case DEnum => {
+            val paramTypeName = marshal.typename(tm)
+            wr.wl(s"if ($converting < 0 || $paramTypeName.values().length <= $converting)").braced {
+              wr.wl(s"""promise.reject("Enum error", "Failed to get enum $paramTypeName");""")
+              wr.wl("return;")
+            }
+
+            wr.wl(s"$paramTypeName $converted = $paramTypeName.values()[$converting];")
+          }
           case _ =>
         }
       case _ =>
@@ -717,7 +727,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                         case MList | MSet | MMap => s"javaParam_${index}"
                         case d: MDef =>
                           d.defType match {
-                            case DInterface | DRecord => s"javaParam_${index}"
+                            case DInterface | DRecord | DEnum => s"javaParam_${index}"
                             case _ => idJava.field(p.ident)
                           }
                         case _ => idJava.field(p.ident)
@@ -725,7 +735,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                     }
                     case d: MDef =>
                       d.defType match {
-                        case DInterface | DRecord => s"javaParam_${index}"
+                        case DInterface | DRecord | DEnum => s"javaParam_${index}"
                         case _ => idJava.field(p.ident)
                       }
                     case _ => idJava.field(p.ident)
@@ -974,7 +984,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                   case MList | MSet | MMap => s"javaParam_${index}"
                   case d: MDef =>
                     d.defType match {
-                      case DInterface | DRecord => s"javaParam_${index}"
+                      case DInterface | DRecord | DEnum => s"javaParam_${index}"
                       case _ => idJava.field(f.ident)
                     }
                   case _ => idJava.field(f.ident)
@@ -982,7 +992,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
               }
               case d: MDef =>
                 d.defType match {
-                  case DInterface | DRecord => s"javaParam_${index}"
+                  case DInterface | DRecord | DEnum => s"javaParam_${index}"
                   case _ => idJava.field(f.ident)
                 }
               case _ => idJava.field(f.ident)

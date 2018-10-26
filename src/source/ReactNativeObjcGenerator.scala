@@ -98,6 +98,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
 
     if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
       Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdent")
+    } else if (isEnum(p.ty.resolved)) {
+      Some(identity, s"(int)$localIdent")
     } else {
       val paramType = marshal.paramType(p.ty)
       val findIntType = """int\d+_t""".r
@@ -515,7 +517,13 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             m.params.foreach(p =>{
               val index = m.params.indexOf(p)
               val start = if (p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
-              val param = if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
+              //val param = if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
+              var param = idObjc.field(p.ident)
+              if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
+                param = s"objcParam_${index}"
+              } else if (isEnum(p.ty.resolved)) {
+                param = s"(${marshal.fieldType(p.ty.resolved)})${idObjc.field(p.ident)}"
+              }
               w.w(s"${start}:${param}")
             })
 
@@ -724,7 +732,13 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           if (id != 0) {
             w.w(s"${idObjc.field(f.ident)}:")
           }
-          val arg = if (isInterface || isRecord) s"field_$id" else s"${idObjc.field(f.ident)}"
+          //val arg = if (isInterface || isRecord) s"field_$id" else s"${idObjc.field(f.ident)}"
+          var arg = idObjc.field(f.ident)
+          if (isInterface || isRecord) {
+            arg = s"field_$id"
+          } else if (isEnum(f.ty.resolved)) {
+            arg = s"(${marshal.paramType(f.ty.resolved)})${idObjc.field(f.ident)}"
+          }
           w.w(arg)
           if (id != r.fields.length - 1) {
             w.w(" ")
