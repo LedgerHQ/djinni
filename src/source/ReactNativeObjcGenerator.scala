@@ -87,28 +87,55 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     case _ => false
   }
 
-  def isBinary(tm: MExpr): Boolean = tm.base match {
+  def isExprBinary(tm: MExpr): Boolean = tm.base match {
+    case MOptional | MList | MSet | MMap => isExprBinary(tm.args.head)
     case MBinary => true
+    case _ => false
+  }
+
+  def isBinary(tm: MExpr): Boolean = tm.base match {
+    case MOptional => isBinary(tm.args.head)
+    case MBinary => true
+    case _ => false
+  }
+
+  def isContainer(tm: MExpr): Boolean = tm.base match {
+    case MOptional => isContainer(tm.args.head)
+    case MList | MSet | MMap => true
     case _ => false
   }
 
   def generateParams(p: Field): Option[(String, String)] = {
     val localIdent = idObjc.local(p.ident)
-    val identity = idObjc.field(p.ident)
-
-    if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
-      Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdent")
-    } else if (isEnum(p.ty.resolved)) {
-      Some(identity, s"(int)$localIdent")
-    } else {
-      val paramType = marshal.paramType(p.ty)
-      val findIntType = """int\d+_t""".r
-      findIntType.findFirstIn(paramType) match {
-        case Some(_) => Some(identity, s"(int)$localIdent")
-        case None => Some(identity, s"($paramType)$localIdent")
+    val ident = idObjc.field(p.ident)
+    def generateParamsLocal(tm: MExpr, identity: String, localIdentity: String, hasParentContainer: Boolean = false): Option[(String, String)] = {
+      tm.base match {
+        case MMap | MList | MSet => generateParamsLocal(tm.args.head, identity, localIdentity, true)
+        case MOptional => generateParamsLocal(tm.args.head, identity, localIdentity)
+        case d: MDef =>
+          d.defType match {
+            case DInterface | DRecord => Some(identity, s"(${reactInterfaceType(p.ty.resolved)})$localIdentity")
+            case DEnum => Some(identity, s"(int)$localIdentity")
+          }
+        case MBinary => {
+          hasParentContainer match {
+            case true => Some(identity, s"(NSArray<NSString *> *)$localIdentity")
+            case _ => Some(identity, s"(NSString *)$localIdentity")
+          }
+        }
+        case _ => {
+          val paramType = marshal.paramType(p.ty)
+          val findIntType = """int\d+_t""".r
+          findIntType.findFirstIn(paramType) match {
+            case Some(_) => Some(identity, s"(int)$localIdentity")
+            case None => Some(identity, s"($paramType)$localIdentity")
+          }
+        }
       }
     }
+    generateParamsLocal(p.ty.resolved, ident, localIdent)
   }
+
   def generateInitMethod(wr : IndentWriter, hasOneFieldAsInterface: Boolean = false): Unit = {
     wr.wl("-(instancetype)init").braced {
       wr.wl("self = [super init];")
@@ -145,6 +172,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       val rctItf = spec.reactNativeTypePrefix + objcInterface
       wr.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
         wr.wl(s"""reject(@"impl_call_error", @"Error while calling $rctItf::release, first argument should be an instance of $objcInterface", nil);""")
+        //WARNING
+        //w.wl("return;")
       }
       wr.wl("""[self.objcImplementations removeObjectForKey:currentInstance[@"uid"]];""")
       wr.wl("resolve(@(YES));")
@@ -166,6 +195,21 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     wr.wl("RCT_REMAP_METHOD(flush, flushWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
       wr.wl(s"[self.objcImplementations removeAllObjects];")
       wr.wl("resolve(@(YES));")
+    }
+  }
+
+  def generateHexToDataMethod(wr : IndentWriter): Unit = {
+    wr.wl("-(NSData *) hexStringToData: (NSString *)hexString ").braced {
+      wr.wl("NSMutableData *data= [[NSMutableData alloc] init];")
+      wr.wl("unsigned char byte;")
+      wr.wl("char byteChars[3] = {'\\0','\\0','\\0'};")
+      wr.wl("for (int i = 0; i < ([hexString length] / 2); i++)").braced {
+        wr.wl("byteChars[0] = [hexString characterAtIndex: i*2];")
+        wr.wl("byteChars[1] = [hexString characterAtIndex: i*2 + 1];")
+        wr.wl("byte = strtol(byteChars, NULL, 16);")
+        wr.wl("[data appendBytes:&byte length:1];")
+      }
+      wr.wl("return data;")
     }
   }
 
@@ -203,6 +247,36 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     }
   }
 
+  def writeResultDictionary(ty: TypeRef, resultName: String, objcResultName: String, boxResult: Boolean, wr: IndentWriter) : Unit = {
+    wr.w(s"""NSDictionary *$resultName = @{@"value" : """)
+    val isIntType = isIntegerType(ty)
+    val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(ty)
+    if (boxResult) {
+      wr.w("@(")
+    }
+
+    def getObjcResult(tm: MExpr) : String = tm.base match {
+      case p: MPrimitive => {
+        fieldType match {
+          case "NSNumber *" => s"@([$objcResultName intValue])"
+          case _ => objcResultName
+        }
+      }
+      case MBinary => s"$objcResultName.description"
+      case MDate => s"${objcResultName}Date"
+      case MOptional => getObjcResult(tm.args.head)
+      case _ => objcResultName
+    }
+    val objcResult = getObjcResult(ty.resolved)
+
+    wr.w(s"$objcResult")
+
+    if (boxResult) {
+      wr.w(")")
+    }
+    wr.w("};")
+  }
+
   def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter): Unit = tm.base match {
     case MOptional => toReactType(tm.args.head, converted, converting, wr)
     case MList => {
@@ -231,15 +305,15 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     case d: MDef =>
       d.defType match {
         case DInterface | DRecord => {
-          wr.wl("NSString *uuid = [[NSUUID UUID] UUIDString];")
+          wr.wl(s"NSString *${converting}_uuid = [[NSUUID UUID] UUIDString];")
           //Bridge is shortning prefix if it's starting with RCT
           val prefix = "RCT"
           val objcParamType = getRCTName(marshal.typename(tm))
           val paramTypeName = spec.reactNativeTypePrefix + objcParamType
           val moduleName = if (paramTypeName.indexOf(prefix) == 0) paramTypeName.substring(prefix.length) else paramTypeName
           wr.wl(s"""$paramTypeName *rctImpl_$converting = ($paramTypeName *)[self.bridge moduleForName:@"$moduleName"];""")
-          wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:uuid];")
-          wr.wl(s"""NSDictionary *$converted = @{@"type" : @"$moduleName", @"uid" : uuid };""")
+          wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
+          wr.wl(s"""NSDictionary *$converted = @{@"type" : @"$moduleName", @"uid" : ${converting}_uuid };""")
         }
         case _ =>
       }
@@ -299,6 +373,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         wr.wl
       }
     }
+    case MBinary => {
+      wr.wl(s"NSData *$converted = [self hexStringToData:$converting];")
+      wr.wl
+    }
     case d: MDef =>
       d.defType match {
         case DInterface | DRecord => {
@@ -347,6 +425,16 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     i.consts.map(c => {
       refs.find(c.ty)
     })
+
+    //Need for converter from hex string to NSData ?
+    val needHexConverter = i.methods.filter(m => {
+      m.params.filter(p => {
+        p.ty.resolved.base match {
+          case MList | MSet | MMap | MOptional => isBinary(p.ty.resolved.args.head)
+          case _ => isBinary(p.ty.resolved)
+        }
+      }).length > 0
+    }).length > 0
 
     val callbackInterface = isCallbackInterface(ident, i)
     val objcInterface = if(i.ext.objc) marshal.typename(ident, i) + spec.reactNativeObjcImplSuffix else marshal.typename(ident, i)
@@ -434,6 +522,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         generateLogInstancesMethod(w)
         //Flush all objc intances from React Native Module's objcImplementations attribute
         generateFlushInstancesMethod(w)
+        //Generate hex converter
+        if (needHexConverter) {
+          generateHexToDataMethod(w)
+        }
       }
 
       var hasFactoryMethod = false
@@ -452,8 +544,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             //Case param is itf or container of itfs
             val errorParam = m.params(1)
             val resultParam = m.params(0)
-            val isParamInterface = isExprInterface(resultParam.ty.resolved)
-            val isParamRecord = isExprRecord(resultParam.ty.resolved)
+            val isParamInterfaceOrRecord = isExprInterface(resultParam.ty.resolved) || isExprRecord(resultParam.ty.resolved)
+            val isParamBinary = isBinary(resultParam.ty.resolved)
             //Case of error
             w.wl(s"if (${idObjc.field(errorParam.ident)})").braced {
               //Suppose that error has always a 'message' attribute
@@ -462,47 +554,75 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             }
             w.wl
             //TODO: Handle Enums
-            if (isParamInterface || isParamRecord) {
+            if (isParamInterfaceOrRecord) {
               //Callback has result and callback args
               toReactType(resultParam.ty.resolved, "converted_result", idObjc.field(resultParam.ident), w)
+              w.wl
+              w.wl(s"self.resolve(converted_result);")
+            } else {
+              //val callbackResult = s"${idObjc.field(resultParam.ident)}${if (isParamBinary) ".description" else ""}"
+              w.wl
+              val boxCallbackResult = marshal.toBox(resultParam.ty.resolved)
+              writeResultDictionary(resultParam.ty, "callbackResult", idObjc.field(resultParam.ident), boxCallbackResult,w)
+              w.wl
+              //w.w("""NSDictionary *callbackResult = @{@"value" : """)
+              w.wl(s"self.resolve(callbackResult);")
             }
-            w.wl
-            w.wl(s"self.resolve(${if (isParamInterface || isParamRecord) "converted_result" else idObjc.field(resultParam.ident)});")
           } else {
 
             if (!m.static) {
               //Get current Instance
               w.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
                 w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::${idObjc.method(m.ident)}, first argument should be an instance of ${objcInterface}", nil);""")
+                //WARNING
+                //w.wl("return;")
               }
 
               w.wl(s"""${objcInterface} *currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
               w.wl("if (!currentInstanceObj)").braced {
                 w.wl(s"""NSString *error = [NSString stringWithFormat:@"Error while calling ${objcInterface}::${idObjc.method(m.ident)}, instance of uid %@ not found", currentInstance[@"uid"]];""")
                 w.wl(s"""reject(@"impl_call_error", error, nil);""")
+                //WARNING
+                //w.wl("return;")
               }
+            }
+
+            def getConverter(param: Field, paramIndex: Int) : Unit = {
+              val paramdIdentity = idObjc.field(param.ident)
+              val dataContainer = ""
+              val hasParentContainer = false
+              def getConverterLocal(tm: MExpr) : Unit = tm.base match {
+                case MList | MSet | MMap | MOptional => getConverterLocal(tm.args.head)
+                case MBinary => fromReactType(tm, param.ident, s"objcParam_$paramIndex", idObjc.field(param.ident), w, dataContainer, hasParentContainer, ret != "void")
+                case d: MDef =>
+                  d.defType match {
+                    case DInterface | DRecord => fromReactType(tm, param.ident, s"objcParam_$paramIndex", idObjc.field(param.ident), w, dataContainer, hasParentContainer, ret != "void")
+                    case _ =>
+                  }
+                case _ =>
+              }
+              getConverterLocal(param.ty.resolved)
             }
 
             //Retrieve from bridge if necessary
             m.params.foreach(p =>{
-              if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
-                val index = m.params.indexOf(p)
-                //Bridge is shortning prefix if it's starting with RCT
-                val prefix = "RCT"
-                val paramTypeName = marshal.typename(p.ty)
-                val objcParamType = getRCTName(paramTypeName)
-                val rctParamType = spec.reactNativeTypePrefix + objcParamType
-                val isObjcImplemented = objcInterfaces.contains(objcParamType.substring(idObjc.ty("").length))
-                val finalObjcParamType = s"$paramTypeName${if (isObjcImplemented) "" else " *"}"
-                if (paramTypeName.contains("Callback")) {
-                  //Construct RCT callback from resolver and rejecter
-                  w.wl(s"$rctParamType *objcParam_${index} = [[$rctParamType alloc] initWithResolver:resolve rejecter:reject andBridge:self.bridge];")
-                } else {
-                  //TODO: check if parameters are having "type" and "uid" fields
-                  val dataContainer = ""
-                  val hasParentContainer = false
-                  fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w, dataContainer, hasParentContainer, ret != "void")
-                }
+              val index = m.params.indexOf(p)
+              //Bridge is shortning prefix if it's starting with RCT
+              val prefix = "RCT"
+              val paramTypeName = marshal.typename(p.ty)
+              val objcParamType = getRCTName(paramTypeName)
+              val rctParamType = spec.reactNativeTypePrefix + objcParamType
+              val isObjcImplemented = objcInterfaces.contains(objcParamType.substring(idObjc.ty("").length))
+              val finalObjcParamType = s"$paramTypeName${if (isObjcImplemented) "" else " *"}"
+              if (paramTypeName.contains("Callback")) {
+                //Construct RCT callback from resolver and rejecter
+                w.wl(s"$rctParamType *objcParam_${index} = [[$rctParamType alloc] initWithResolver:resolve rejecter:reject andBridge:self.bridge];")
+              } else {
+                //TODO: check if parameters are having "type" and "uid" fields
+                val dataContainer = ""
+                val hasParentContainer = false
+                //fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w, dataContainer, hasParentContainer, ret != "void")
+                getConverter(p, index)
               }
             })
 
@@ -517,13 +637,17 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             m.params.foreach(p =>{
               val index = m.params.indexOf(p)
               val start = if (p == m.params(0)) "" else s" ${idObjc.field(p.ident)}"
-              //val param = if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved))  s"objcParam_${index}" else idObjc.field(p.ident)
-              var param = idObjc.field(p.ident)
-              if (isExprInterface(p.ty.resolved) || isExprRecord(p.ty.resolved)) {
-                param = s"objcParam_${index}"
-              } else if (isEnum(p.ty.resolved)) {
-                param = s"(${marshal.fieldType(p.ty.resolved)})${idObjc.field(p.ident)}"
+              def getParamName(tm: MExpr) : String = tm.base match {
+                case MList | MSet | MMap | MOptional => getParamName(tm.args.head)
+                case MBinary => s"objcParam_${index}"
+                case d: MDef =>
+                  d.defType match {
+                    case DInterface | DRecord => s"objcParam_${index}"
+                    case DEnum => s"(${marshal.fieldType(p.ty.resolved)})${idObjc.field(p.ident)}"
+                  }
+                case _ => idObjc.field(p.ident)
               }
+              val param = getParamName(p.ty.resolved)
               w.w(s"${start}:${param}")
             })
 
@@ -555,33 +679,34 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 }
                 formatIfDate(m.ret.get.resolved)
 
-                w.w("""NSDictionary *result = @{@"value" : """)
-                val isIntType = isIntegerType(m.ret.get)
-                val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(m.ret.get)
-                if (boxResult) {
-                  w.w("@(")
-                }
-
-                def getObjcResult(tm: MExpr) : String = tm.base match {
-                  case p: MPrimitive => {
-                    fieldType match {
-                      case "NSNumber *" => "@([objcResult intValue])"
-                      case _ => "objcResult"
-                    }
-                  }
-                  case MBinary => "objcResult.description"
-                  case MDate => "objcResultDate"
-                  case MOptional => getObjcResult(tm.args.head)
-                  case _ => "objcResult"
-                }
-                val objcResult = getObjcResult(m.ret.get.resolved)
-
-                w.w(s"$objcResult")
-
-                if (boxResult) {
-                  w.w(")")
-                }
-                w.w("};")
+                writeResultDictionary(m.ret.get, "result", "objcResult", boxResult, w)
+//                w.w("""NSDictionary *result = @{@"value" : """)
+//                val isIntType = isIntegerType(m.ret.get)
+//                val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(m.ret.get)
+//                if (boxResult) {
+//                  w.w("@(")
+//                }
+//
+//                def getObjcResult(tm: MExpr) : String = tm.base match {
+//                  case p: MPrimitive => {
+//                    fieldType match {
+//                      case "NSNumber *" => "@([objcResult intValue])"
+//                      case _ => "objcResult"
+//                    }
+//                  }
+//                  case MBinary => "objcResult.description"
+//                  case MDate => "objcResultDate"
+//                  case MOptional => getObjcResult(tm.args.head)
+//                  case _ => "objcResult"
+//                }
+//                val objcResult = getObjcResult(m.ret.get.resolved)
+//
+//                w.w(s"$objcResult")
+//
+//                if (boxResult) {
+//                  w.w(")")
+//                }
+//                w.w("};")
               }
 
               w.wl
@@ -591,6 +716,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               w.wl("else").braced {
                 //Send a null NSError object for the moment
                 w.wl(s"""reject(@"impl_call_error", @"Error while calling ${objcInterface}::${idObjc.method(m.ident)}", nil);""")
+                //WARNING
+                //w.wl("return;")
               }
             }
           }
@@ -610,6 +737,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
           w.wl("if (!objcResult || !result)").braced {
             w.wl(s"""reject(@"impl_call_error", @"Error while calling ${rctType}::init", nil);""")
+            //WARNING
+            //w.wl("return;")
           }
           w.wl("resolve(result);")
         }
@@ -626,6 +755,12 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       refs.find(c.ty)
     for (f <- r.fields)
       refs.find(f.ty, addRCTHeader)
+
+    //Need for converter from hex string to NSData ?
+    val needHexConverter = r.fields.filter(f => f.ty.resolved.base match {
+      case MList | MSet | MMap | MOptional => isBinary(f.ty.resolved.args.head)
+      case _ => isBinary(f.ty.resolved)
+    }).length > 0
 
     val objcName = ident.name + (if (r.ext.objc) "_base" else "")
     val noBaseSelf = marshal.typename(ident, r) // Used for constant names
@@ -645,9 +780,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     writeObjcFile(fileName, origin, refs.header, w => {
       writeDoc(w, doc)
       w.wl(s"@interface $self : NSObject <RCTBridgeModule>")
-      w.wl(s"@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
+      w.wl("@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
       if (hasOneFieldAsInterface) {
-        w.wl(s"@property (nonatomic, strong) NSMutableDictionary *implementationsData;")
+        w.wl("@property (nonatomic, strong) NSMutableDictionary *implementationsData;")
+        w.wl("-(void)mapImplementationsData:(NSDictionary *)currentInstance;")
       }
       w.wl("@end")
     })
@@ -681,7 +817,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       generateLogInstancesMethod(w)
       //Flush all objc intances from React Native Module's objcImplementations attribute
       generateFlushInstancesMethod(w)
-
+      //Generate hex converter
+      if (needHexConverter) {
+        generateHexToDataMethod(w)
+      }
       // Constructor from all fields (not copying)
       val init = s"RCT_REMAP_METHOD(init, init$firstInitializerArg"
       writeAlignedReactNativeCall(w, init, r.fields, "", f => {
@@ -695,19 +834,49 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           w.wl(s"NSMutableDictionary *implementationsData = [[NSMutableDictionary alloc] init];")
         }
         var rejectCondition = ""
+
+        def getParamName(field: Field, fieldIndex: Int) : String = {
+          val fieldIdentity = idObjc.field(field.ident)
+          def getParamNameLocal(tm: MExpr) : String = tm.base match {
+            case MList | MSet | MMap | MOptional => getParamNameLocal(tm.args.head)
+            case MBinary => s"field_$fieldIndex"
+            case d: MDef =>
+              d.defType match {
+                case DInterface | DRecord => s"field_$fieldIndex"
+                case DEnum => s"(${marshal.fieldType(field.ty.resolved)})${idObjc.field(field.ident)}"
+              }
+            case _ => fieldIdentity
+          }
+          getParamNameLocal(field.ty.resolved)
+        }
+
+        def getConverter(field: Field, fieldIndex: Int) : Unit = {
+          val fieldIdentity = idObjc.field(field.ident)
+          def getConverterLocal(tm: MExpr) : Unit = tm.base match {
+            case MList | MSet | MMap | MOptional => getConverterLocal(tm.args.head)
+            case MBinary => fromReactType(field.ty.resolved, field.ident, s"field_$fieldIndex", fieldIdentity, w)
+            case d: MDef =>
+              d.defType match {
+                case DInterface | DRecord => fromReactType(field.ty.resolved, field.ident, s"field_$fieldIndex", fieldIdentity, w, "implementationsData")
+                case _ =>
+              }
+            case _ =>
+          }
+          getConverterLocal(field.ty.resolved)
+        }
+
+
         r.fields.map(f => {
           val id = r.fields.indexOf(f)
           val isInterface = isExprInterface(f.ty.resolved)
           val isRecord = isExprRecord(f.ty.resolved)
           val fieldIdent = idObjc.field(f.ident)
-          if (isInterface || isRecord) {
-            fromReactType(f.ty.resolved, f.ident, s"field_$id", fieldIdent, w, "implementationsData")
-
-          }
+          getConverter(f, id)
+          //fromReactType(f.ty.resolved, f.ident, s"field_$id", fieldIdent, w, "implementationsData")
           //For reject condition
           val nullability = marshal.nullability(f.ty.resolved)
           if (!nullability.isDefined || nullability.get == "nonnull") {
-            val additionalCondition = if (isInterface || isRecord) s"field_$id" else fieldIdent
+            val additionalCondition = getParamName(f, id)
             if (rejectCondition.length == 0) {
               rejectCondition.concat(s"!$additionalCondition")
             } else {
@@ -720,6 +889,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         if (rejectCondition.length > 0) {
           w.wl(s"if ($rejectCondition)").braced {
             w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::init", nil);""")
+            //WARNING
+            //w.wl("return;")
           }
         }
         w.wl
@@ -732,14 +903,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           if (id != 0) {
             w.w(s"${idObjc.field(f.ident)}:")
           }
-          //val arg = if (isInterface || isRecord) s"field_$id" else s"${idObjc.field(f.ident)}"
-          var arg = idObjc.field(f.ident)
-          if (isInterface || isRecord) {
-            arg = s"field_$id"
-          } else if (isEnum(f.ty.resolved)) {
-            arg = s"(${marshal.paramType(f.ty.resolved)})${idObjc.field(f.ident)}"
-          }
-          w.w(arg)
+          w.w(getParamName(f, id))
           if (id != r.fields.length - 1) {
             w.w(" ")
           }
@@ -763,6 +927,24 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       }
       w.wl
 
+      //Mapping method
+      if (hasOneFieldAsInterface) {
+        w.wl(s"-(void)mapImplementationsData:(NSDictionary *)currentInstance").braced {
+          w.wl(s"""$objcInterface *objcImpl = ($objcInterface *)[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+          w.wl("NSMutableDictionary *implementationsData = [[NSMutableDictionary alloc] init];")
+          r.fields.map(f => {
+            val id = r.fields.indexOf(f)
+            val isFieldInterfaceOrRecord = isExprInterface(f.ty.resolved) || isExprRecord(f.ty.resolved)
+            val fieldIdent = idObjc.field(f.ident)
+            if (isFieldInterfaceOrRecord) {
+              w.wl(s"id field_$id = objcImpl.$fieldIdent;")
+              toReactType(f.ty.resolved, s"converted_field_$id", s"field_$id", w)
+              w.wl(s"""[implementationsData setObject:converted_field_$id forKey:@"$fieldIdent"];""")
+            }
+          })
+          w.wl("""[self.implementationsData setObject:implementationsData forKey:currentInstance[@"uid"]];""")
+        }
+      }
       //Getters attributes
       def getterResult(ty: TypeRef, returnValue: String): String = {
         val tyType = marshal.paramType(ty)
@@ -781,6 +963,12 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         }
       }
 
+      def getFieldTypeName(tm: MExpr) : String = {
+        tm.base match {
+          case MOptional | MSet | MList | MMap => getFieldTypeName(tm.args.head)
+          case _ => marshal.typename(tm)
+        }
+      }
       r.fields.map(f => {
         val id = r.fields.indexOf(f)
         val isFieldInterface = isExprInterface(f.ty.resolved)
@@ -795,20 +983,20 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         }
         w.wl(s"RCT_REMAP_METHOD($getterName, $getterName:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)rejecter)").braced {
 
-          val fieldTypeName = marshal.typename(f.ty.resolved)
+          val fieldTypeName = getFieldTypeName(f.ty.resolved)
           val objcFieldType = getRCTName(fieldTypeName)
           val reactFieldType = spec.reactNativeTypePrefix + objcFieldType
-          w.wl(s"""$objcInterface *objcImpl = ($objcInterface *)[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
-
           val fieldType = marshal.paramType(f.ty)
           if (isFieldInterface || isFieldRecord) {
             w.wl("""NSDictionary *data = (NSDictionary *)[self.implementationsData objectForKey:currentInstance[@"uid"]];""")
-            w.wl(s"""NSString *returnUuid = [data objectForKey:@"$fieldIdent"];""")
-            val prefix = "RCT"
-            val moduleFieldName = if (reactFieldType.indexOf(prefix) == 0) reactFieldType.substring(prefix.length) else reactFieldType
-            w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleFieldName", @"uid" : returnUuid };""")
-          } else {
+            w.wl("if (!data)").braced {
+              w.wl("[self mapImplementationsData:currentInstance];")
+              w.wl("""data = (NSDictionary *)[self.implementationsData objectForKey:currentInstance[@"uid"]];""")
+            }
 
+            w.wl(s"""${if (isContainer(f.ty.resolved)) "NSArray<NSDictionary *>" else "NSDictionary"} *result = [data objectForKey:@"$fieldIdent"];""")
+          } else {
+            w.wl(s"""$objcInterface *objcImpl = ($objcInterface *)[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
             val returnValue = s"objcImpl.$fieldIdent${if (isBinary(f.ty.resolved)) s".description" else ""}"
             w.wl(s"""NSDictionary *result = @{@"value" : ${getterResult(f.ty, returnValue)}};""")
           }
