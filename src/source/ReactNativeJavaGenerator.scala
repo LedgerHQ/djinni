@@ -171,6 +171,20 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     }
   }
 
+  def generateDataToHexMethod(wr : IndentWriter): Unit = {
+    wr.wl("""static final String HEXES = "0123456789ABCDEF";""")
+    wr.wl("public static String byteArrayToHexString( byte [] data)").braced {
+      wr.wl("if (data == null)").braced {
+        wr.wl("return null;")
+      }
+      wr.wl("final StringBuilder hexStringBuilder = new StringBuilder( 2 * data.length );")
+      wr.wl("for ( final byte b : data )").braced {
+        wr.wl("hexStringBuilder.append(HEXES.charAt((b & 0xF0) >> 4)).append(HEXES.charAt((b & 0x0F)));")
+      }
+      wr.wl("return hexStringBuilder.toString();")
+    }
+  }
+
   /*
   As always, we suppose that callbacks implement only one method: onCallback,
   it has 2 arguments, in order, first one is result and second one error
@@ -251,7 +265,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
       case d: MDef =>
         d.defType match {
           case DInterface | DRecord => s"${prefixMethod}Map"
-          case DEnum => s"${prefixMethod}String"
+          case DEnum => s"${prefixMethod}Int"
         }
       case p: MPrimitive => {
         p.idlName match {
@@ -288,7 +302,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         wr.wl(s"for ($paramType ${converting}_elem : $converting)").braced {
           toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isJavaImplemented)
           val element = tm.args.head.base match {
-            case MBinary => s"${converting}_elem.toString()"
+            case MBinary => s"${converted}_elem"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem"
@@ -304,7 +318,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         wr.wl(s"for ($paramType ${converting}_elem : arrayFromSet_$converting)").braced {
           toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isJavaImplemented)
           val element = tm.args.head.base match {
-            case MBinary => s"${converting}_elem.toString()"
+            case MBinary => s"${converted}_elem"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem"
@@ -326,7 +340,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           wr.wl(s"$valueType ${converted}_elem_value = ${converting}_elem.getValue();")
           toReactType(tm.args.head, s"${converted}_elem_value", s"${converting}_elem_value", wr, isJavaImplemented)
           val element = tm.args.head.base match {
-            case MBinary => s"${converting}_elem_value.toString()"
+            case MBinary => s"${converted}_elem"
             case d: MDef =>
               d.defType match {
                 case DInterface | DRecord => s"${converted}_elem_value"
@@ -339,7 +353,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         }
       }
       case MBinary => {
-        wr.wl(s"String $converted = $converting.toString();")
+        wr.wl(s"String $converted = byteArrayToHexString($converting);")
       }
       case MDate => {
         wr.wl(s"""DateFormat ${converting}DateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");""")
@@ -761,11 +775,10 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 val resultParam = m.params(0)
                 val isParamInterface = isExprInterface(resultParam.ty.resolved)
                 val isParamRecord = isExprRecord(resultParam.ty.resolved)
-                if (isParamInterface || isParamRecord) {
-                  toReactType(resultParam.ty.resolved, "converted_result", idJava.field(resultParam.ident), w)
-                }
+                val isParamBinary = isBinary(resultParam.ty.resolved)
+                toReactType(resultParam.ty.resolved, "converted_result", idJava.field(resultParam.ident), w)
                 w.wl
-                w.wl(s"this.promise.resolve(${if (isParamInterface || isParamRecord) "converted_result" else idJava.field(resultParam.ident)});")
+                w.wl(s"this.promise.resolve(${if (isParamInterface || isParamRecord || isParamBinary) "converted_result" else idJava.field(resultParam.ident)});")
               }
 
               if (!callbackInterface) {
@@ -815,7 +828,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                       case d: MDef =>
                         d.defType match {
                           case DEnum => {
-                            w.wl(s"String finalJavaResult = $converting.toString();")
+                            w.wl(s"int finalJavaResult = $converting.ordinal();")
                             "finalJavaResult"
                           }
                           case _ => converting
@@ -877,6 +890,10 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           w.wl("public Promise promise;")
           w.wl("public ReactApplicationContext reactContext;")
           generateInitMethodForCallback(w, self)
+          //Generate hex converter
+          if (needHexConverter) {
+            generateDataToHexMethod(w)
+          }
           writeItfMethods()
         }
       } else {
@@ -926,6 +943,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           //Generate hex converter
           if (needHexConverter) {
             generateHexToDataMethod(w)
+            generateDataToHexMethod(w)
           }
           w.wl
           writeItfMethods()
@@ -1000,6 +1018,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         //Generate hex converter
         if (needHexConverter) {
           generateHexToDataMethod(w)
+          generateDataToHexMethod(w)
         }
         w.wl
         w.wl("@ReactMethod")
@@ -1153,10 +1172,27 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 w.wl(s"$supportedFieldTypeName result = javaObj.$getterName();")
                 toReactType(f.ty.resolved, "converted_result", "result", w)
 
-                f.ty.resolved.base match {
+                def resolvePromise(tm: MExpr) : Unit = {
+                  tm.base match {
+                    case MOptional => resolvePromise(tm.args.head)
                     case MList | MSet | MMap | MDate => w.wl(s"promise.resolve(converted_result);")
-                    case _ => w.wl(s"promise.resolve(result);")
+                    case _ => {
+                      w.wl("WritableNativeMap resultMap = new WritableNativeMap();")
+                      val localResult = tm.base match {
+                        case MBinary => "converted_result"
+                        case d: MDef =>
+                          d.defType match {
+                            case  DEnum => "result.ordinal()"
+                            case _ => "result"
+                          }
+                        case _ => "result"
+                      }
+                      w.wl(s"""resultMap.${putMethod(tm)}("value", $localResult);""")
+                      w.wl(s"promise.resolve(resultMap);")
+                    }
+                  }
                 }
+                resolvePromise(f.ty.resolved)
               }
             }
             w.wl("else").braced {
