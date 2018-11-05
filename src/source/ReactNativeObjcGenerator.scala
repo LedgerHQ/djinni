@@ -172,8 +172,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       val rctItf = spec.reactNativeTypePrefix + objcInterface
       wr.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
         wr.wl(s"""reject(@"impl_call_error", @"Error while calling $rctItf::release, first argument should be an instance of $objcInterface", nil);""")
-        //WARNING
-        //w.wl("return;")
+        wr.wl("return;")
       }
       wr.wl("""[self.objcImplementations removeObjectForKey:currentInstance[@"uid"]];""")
       wr.wl("resolve(@(YES));")
@@ -560,12 +559,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               w.wl
               w.wl(s"self.resolve(converted_result);")
             } else {
-              //val callbackResult = s"${idObjc.field(resultParam.ident)}${if (isParamBinary) ".description" else ""}"
               w.wl
               val boxCallbackResult = marshal.toBox(resultParam.ty.resolved)
               writeResultDictionary(resultParam.ty, "callbackResult", idObjc.field(resultParam.ident), boxCallbackResult,w)
               w.wl
-              //w.w("""NSDictionary *callbackResult = @{@"value" : """)
               w.wl(s"self.resolve(callbackResult);")
             }
           } else {
@@ -574,16 +571,14 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               //Get current Instance
               w.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
                 w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::${idObjc.method(m.ident)}, first argument should be an instance of ${objcInterface}", nil);""")
-                //WARNING
-                //w.wl("return;")
+                w.wl("return;")
               }
 
               w.wl(s"""${objcInterface} *currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
               w.wl("if (!currentInstanceObj)").braced {
                 w.wl(s"""NSString *error = [NSString stringWithFormat:@"Error while calling ${objcInterface}::${idObjc.method(m.ident)}, instance of uid %@ not found", currentInstance[@"uid"]];""")
                 w.wl(s"""reject(@"impl_call_error", error, nil);""")
-                //WARNING
-                //w.wl("return;")
+                w.wl("return;")
               }
             }
 
@@ -621,7 +616,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 //TODO: check if parameters are having "type" and "uid" fields
                 val dataContainer = ""
                 val hasParentContainer = false
-                //fromReactType(p.ty.resolved, p.ident, s"objcParam_$index", idObjc.field(p.ident), w, dataContainer, hasParentContainer, ret != "void")
                 getConverter(p, index)
               }
             })
@@ -680,33 +674,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 formatIfDate(m.ret.get.resolved)
 
                 writeResultDictionary(m.ret.get, "result", "objcResult", boxResult, w)
-//                w.w("""NSDictionary *result = @{@"value" : """)
-//                val isIntType = isIntegerType(m.ret.get)
-//                val fieldType = if (isIntType) "NSInteger" else marshal.fieldType(m.ret.get)
-//                if (boxResult) {
-//                  w.w("@(")
-//                }
-//
-//                def getObjcResult(tm: MExpr) : String = tm.base match {
-//                  case p: MPrimitive => {
-//                    fieldType match {
-//                      case "NSNumber *" => "@([objcResult intValue])"
-//                      case _ => "objcResult"
-//                    }
-//                  }
-//                  case MBinary => "objcResult.description"
-//                  case MDate => "objcResultDate"
-//                  case MOptional => getObjcResult(tm.args.head)
-//                  case _ => "objcResult"
-//                }
-//                val objcResult = getObjcResult(m.ret.get.resolved)
-//
-//                w.w(s"$objcResult")
-//
-//                if (boxResult) {
-//                  w.w(")")
-//                }
-//                w.w("};")
               }
 
               w.wl
@@ -716,8 +683,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
               w.wl("else").braced {
                 //Send a null NSError object for the moment
                 w.wl(s"""reject(@"impl_call_error", @"Error while calling ${objcInterface}::${idObjc.method(m.ident)}", nil);""")
-                //WARNING
-                //w.wl("return;")
+                w.wl("return;")
               }
             }
           }
@@ -737,8 +703,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           w.wl(s"""NSDictionary *result = @{@"type" : @"$moduleName", @"uid" : uuid };""")
           w.wl("if (!objcResult || !result)").braced {
             w.wl(s"""reject(@"impl_call_error", @"Error while calling ${rctType}::init", nil);""")
-            //WARNING
-            //w.wl("return;")
+            w.wl("return;")
           }
           w.wl("resolve(result);")
         }
@@ -872,7 +837,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           val isRecord = isExprRecord(f.ty.resolved)
           val fieldIdent = idObjc.field(f.ident)
           getConverter(f, id)
-          //fromReactType(f.ty.resolved, f.ident, s"field_$id", fieldIdent, w, "implementationsData")
           //For reject condition
           val nullability = marshal.nullability(f.ty.resolved)
           if (!nullability.isDefined || nullability.get == "nonnull") {
@@ -889,8 +853,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         if (rejectCondition.length > 0) {
           w.wl(s"if ($rejectCondition)").braced {
             w.wl(s"""reject(@"impl_call_error", @"Error while calling $self::init", nil);""")
-            //WARNING
-            //w.wl("return;")
+            w.wl("return;")
           }
         }
         w.wl
