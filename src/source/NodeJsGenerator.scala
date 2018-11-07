@@ -31,6 +31,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         val hppFileName = "#include \"" + idNode.ty(ident.name) + "." + spec.cppHeaderExt + "\""
         w.wl
         w.wl(hppFileName)
+        w.wl("#include \"NJSObjectWrapper.hpp\"")
         w.wl
         w.wl("using namespace v8;")
         w.wl("using namespace node;")
@@ -103,8 +104,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
 
                 val quotedMethod = s""""$methodName""""
                 w.wl(s"auto calling_funtion = Nan::Get(local_njs_impl,Nan::New<String>($quotedMethod).ToLocalChecked()).ToLocalChecked();")
-                w.wl("auto handle = this->handle();")
-                w.wl(s"auto result_$methodName = Nan::CallAsFunction(calling_funtion->ToObject(),handle,$countArgs,args);")
+                w.wl(s"auto result_$methodName = Nan::CallAsFunction(calling_funtion->ToObject(),local_njs_impl,$countArgs,args);")
                 w.wl(s"if(result_$methodName.IsEmpty())").braced {
                   val error = s""""$baseClassName::$methodName call failed""""
                   w.wl(s"Nan::ThrowError($error);")
@@ -120,14 +120,9 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           }
         }
         w.wl
-        createRefMethods(ident, i, w)
-        w.wl
         createNanNewMethod(ident, i, None, w)
         w.wl
         createInitializeMethod(ident, i, w)
-
-
-
       })
     }
   }
@@ -202,9 +197,9 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           refs.hppFwds.foreach(w.wl)
         }
 
-        var classInheritance = s"class $className: public Nan::ObjectWrap"
+        var classInheritance = s"class $className final"
         if (nodeMode) {
-          classInheritance = s"$classInheritance, public ${spec.cppNamespace}::$cppClassName"
+          classInheritance = s"class $className: public ${spec.cppNamespace}::$cppClassName"
         }
         w.wl
         w.w(classInheritance).bracedSemi {
@@ -225,30 +220,20 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           w.wl(s"static void Initialize(Local<Object> target);")
 
           if (!nodeMode) {
-
-            // Destructor
-            w.wl(s"virtual ~$className() {};")
-
             //Constructor
-            w.wl(s"$className(const $cpp_shared_ptr &i$cppClassName):_$cppClassName(i$cppClassName){};")
+            w.wl(s"$className() = delete;")
 
             //Object prototype and static wrap method (from c++ to v8/Nan object)
             w.wl
-            w.wl(s"static Handle<Object> wrap(const $cpp_shared_ptr &object);")
+            w.wl(s"static Local<Object> wrap(const $cpp_shared_ptr &object);")
             w.wl(s"static Nan::Persistent<ObjectTemplate> ${cppClassName}_prototype;")
-
-            //c++ implementation getter
-            w.wl(s"$cpp_shared_ptr getCppImpl(){return _$cppClassName;};")
           } else {
 
             // Destructor
             w.wl(s"~$className()").bracedSemi {
-              w.wl("persistent().Reset();")
-
               if (isCallback) {
                 w.wl("pers_resolver.Reset();")
               } else {
-                w.wl("njs_impl.Reset();")
                 w.wl("njs_impl.Reset();")
               }
             }
@@ -289,12 +274,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
           if (!nodeMode) {
             //Implementation in C++
             w.wl(s"static NAN_METHOD(isNull);")
-            w.wl(s"$cpp_shared_ptr _$cppClassName;")
           } else {
-            //Implementation in Node.js
-            w.wl("static NAN_METHOD(addRef);")
-            w.wl("static NAN_METHOD(removeRef);")
-
             //Persistent promise
             if (isCallback) {
               w.wl("Nan::Persistent<Promise::Resolver> pers_resolver;")
@@ -323,10 +303,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       }
 
       //TODO: if no factory ?
-      var initInstance = "nullptr"
       if (factory.isDefined) {
-
-        initInstance = "cpp_instance"
 
         val factoryName = factory.get.ident.name
         val factoryArgsLength = factory.get.params.length
@@ -353,6 +330,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         wr.wl
         wr.wl("//Call factory")
         wr.wl(s"auto cpp_instance = ${spec.cppNamespace}::$cppClassName::$factoryName($factoryArgs);")
+        wr.wl(s"djinni::js::ObjectWrapper<${spec.cppNamespace}::$cppClassName>::Wrap(cpp_instance, info.This());")
       }
 
       if (i.ext.nodeJS) {
@@ -361,30 +339,18 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         wr.wl
         if (ident.name.contains("Callback")){
           wr.wl("auto resolver = v8::Promise::Resolver::New(Nan::GetCurrentContext()).ToLocalChecked();")
-          wr.wl(s"$baseClassName *node_instance = new $baseClassName(resolver);")
+          wr.wl(s"auto node_instance = std::make_shared<$baseClassName>(resolver);")
         } else {
-          wr.wl(s"$baseClassName *node_instance = nullptr;")
-          wr.wl("if(info[0]->IsObject())").braced {
-            wr.wl(s"node_instance = new $baseClassName(info[0]->ToObject());")
-          }
-          wr.wl("else").braced {
+          wr.wl("if(!info[0]->IsObject())").braced {
             val error = s""""$baseClassName::New requires an implementation from node""""
             wr.wl(s"return Nan::ThrowError($error);")
+
           }
+          wr.wl(s"auto node_instance = std::make_shared<$baseClassName>(info[0]->ToObject());")
         }
-
-      } else {
-        wr.wl(s"$baseClassName *node_instance = new $baseClassName($initInstance);")
+        wr.wl(s"djinni::js::ObjectWrapper<$baseClassName>::Wrap(node_instance, info.This());")
       }
-
-      wr.wl
-      wr.wl("if(node_instance)").braced {
-        wr.wl("//Wrap and return node instance")
-        wr.wl("node_instance->Wrap(info.This());")
-        wr.wl("node_instance->Ref();")
-        wr.wl("info.GetReturnValue().Set(info.This());")
-      }
-
+      wr.wl("info.GetReturnValue().Set(info.This());")
     }
   }
 
@@ -401,23 +367,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
       count = count + 1
     })
     count
-  }
-
-  protected def createRefMethods(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
-
-    val baseClassName = marshal.typename(ident, i)
-    wr.w(s"NAN_METHOD($baseClassName::addRef)").braced {
-      wr.wl
-      wr.wl(s"$baseClassName *obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
-      wr.wl("obj->Ref();")
-    }
-
-    wr.wl
-    wr.w(s"NAN_METHOD($baseClassName::removeRef)").braced {
-      wr.wl
-      wr.wl(s"$baseClassName *obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
-      wr.wl("obj->Unref();")
-    }
   }
 
   protected def createInitializeMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
@@ -446,9 +395,6 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         wr.wl("//Set object prototype")
         wr.wl(s"${cppClassName}_prototype.Reset(objectTemplate);")
         wr.wl("Nan::SetPrototypeMethod(func_template,\"isNull\", isNull);")
-      } else {
-        wr.wl("Nan::SetPrototypeMethod(func_template,\"addRef\", addRef);")
-        wr.wl("Nan::SetPrototypeMethod(func_template,\"removeRef\", removeRef);")
       }
       wr.wl
       wr.wl(s"//Add template to target")

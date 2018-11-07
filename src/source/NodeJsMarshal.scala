@@ -264,6 +264,10 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
     }
 
     val cppType = super.paramType(tm, needRef = true)
+    var interfaceName = tm.base match {
+      case d: MDef => idCpp.ty(d.name)
+      case _ => cppType
+    }
     val nodeType = paramType(tm)
 
     def base(m: Meta): IndentWriter = m match {
@@ -281,7 +285,7 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
         val start = cppType.indexOf("<")
         val end = cppType.length - (cppType.reverse.indexOf(">") + 1)
         if(isInterface(tm.args(0))) {
-          wr.wl(s"std::shared_ptr<$nodeType> $converted = nullptr;")
+          wr.wl(s"$cppType $converted = nullptr;")
         } else {
           wr.wl(s"auto $converted = ${spec.cppOptionalTemplate}<${cppType.substring(start + 1, end)}>();")
         }
@@ -324,24 +328,21 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
               if(i.ext.nodeJS) {
                 //Set promise if it is a callback
                 wr.wl
-                wr.wl("//Create promise and set it into Callcack")
+                wr.wl("//Create promise and set it into Callback")
                 wr.wl(s"auto ${converted}_resolver = v8::Promise::Resolver::New(Nan::GetCurrentContext()).ToLocalChecked();")
                 wr.wl(s"$nodeType *njs_ptr_$converted = new $nodeType(${converted}_resolver);")
                 wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
               }
             } else {
               wr.wl(s"Local<Object> njs_$converted = $converting->ToObject(Nan::GetCurrentContext()).ToLocalChecked();")
-              wr.wl(s"$nodeType *njs_ptr_$converted = static_cast<$nodeType *>(Nan::GetInternalFieldPointer(njs_$converted,0));")
+              wr.wl(s"auto $converted = djinni::js::ObjectWrapper<$interfaceName>::Unwrap(njs_$converted);");
 
               if(i.ext.cpp){
-                wr.wl(s"if(!njs_ptr_$converted)").braced{
+                wr.wl(s"if(!$converted)").braced{
                   val error = s""""NodeJs Object to $nodeType failed""""
                   wr.wl(s"return Nan::ThrowError($error);")
                 }
-                wr.wl(s"auto $converted = njs_ptr_$converted->getCppImpl();")
-              }else{
-                wr.wl(s"std::shared_ptr<$nodeType> $converted(njs_ptr_$converted);")
-                }
+              }
             }
             wr.wl
         }
@@ -477,14 +478,12 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
             val nodeType = paramType(tm)
             val cppType = super.paramType(tm, needRef = true)
             //Use wrap methods
-            wr.wl(s"auto ${converted}_wrap = ${idNode.ty(d.name)}::wrap($converting);")
-            wr.wl(s"auto ${converted} = Nan::ObjectWrap::Unwrap<${idNode.ty(d.name)}>(${converted}_wrap)->handle();")
+            wr.wl(s"auto ${converted} = ${idNode.ty(d.name)}::wrap($converting);")
             wr.wl
         }
       case e: MExtern => e.defType match {
         case DInterface =>
-          wr.wl(s"auto ${converted}_wrap = ${idNode.ty(e.name)}::wrap($converting);")
-          wr.wl(s"auto ${converted} = Nan::ObjectWrap::Unwrap<${idNode.ty(e.name)}>(${converted}_wrap)->handle();")
+          wr.wl(s"auto ${converted} = ${idNode.ty(e.name)}::wrap($converting);")
         case _ => wr.wl(e.cpp.typename)
       }
       case p: MParam => wr.wl(simpleCheckedCast("Object"))

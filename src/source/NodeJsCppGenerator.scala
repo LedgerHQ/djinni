@@ -85,7 +85,6 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
           }
       }
     })
-
   }
 
   override def generateInterface(origin: String, ident: Ident, doc: Doc, typeParams: Seq[TypeParam], i: Interface): Unit = {
@@ -108,6 +107,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
         w.wl
         val hppFileName = "#include \"" + idNode.ty(ident.name) + "Cpp." + spec.cppHeaderExt + "\""
         w.wl(hppFileName)
+        w.wl("#include \"NJSObjectWrapper.hpp\"")
         w.wl
         w.wl("using namespace v8;")
         w.wl("using namespace node;")
@@ -155,8 +155,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
             if(!m.static) {
               w.wl
               w.wl("//Unwrap current object and retrieve its Cpp Implementation")
-              w.wl(s"$baseClassName* obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
-              w.wl(s"auto cpp_impl = obj->getCppImpl();")
+              w.wl(s"auto cpp_impl = djinni::js::ObjectWrapper<$cppClassName>::Unwrap(info.This());")
 
               //Test if implementation is null
               w.wl(s"if(!cpp_impl)").braced {
@@ -215,9 +214,9 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
 
   def createCheckMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
     val baseClassName = marshal.typename(ident, i)
+    val cppClassName = cppMarshal.typename(ident, i)
     wr.w(s"NAN_METHOD($baseClassName::isNull)").braced {
-      wr.wl(s"$baseClassName* obj = Nan::ObjectWrap::Unwrap<$baseClassName>(info.This());")
-      wr.wl(s"auto cpp_implementation = obj->getCppImpl();")
+      wr.wl(s"auto cpp_implementation = djinni::js::ObjectWrapper<$cppClassName>::Unwrap(info.This());")
       wr.wl("auto isNull = !cpp_implementation ? true : false;")
       wr.wl("return info.GetReturnValue().Set(Nan::New<Boolean>(isNull));")
     }
@@ -225,32 +224,28 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
   def createWrapMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
     val baseClassName = marshal.typename(ident, i)
     val cppClassName = cppMarshal.typename(ident, i)
-    val cpp_shared_ptr = "std::shared_ptr<" + spec.cppNamespace + "::" + cppClassName + ">"
+    val cppClassNameWithNamespace = spec.cppNamespace + "::" + cppClassName
+    val cpp_shared_ptr = "std::shared_ptr<" + cppClassNameWithNamespace + ">"
     wr.wl
     wr.wl(s"Nan::Persistent<ObjectTemplate> $baseClassName::${cppClassName}_prototype;")
     wr.wl
-    wr.w(s"Handle<Object> $baseClassName::wrap(const $cpp_shared_ptr &object)").braced {
+    wr.w(s"Local<Object> $baseClassName::wrap(const $cpp_shared_ptr &object)").braced {
 
-      wr.wl("Nan::HandleScope scope;")
+      wr.wl("Nan::EscapableHandleScope scope;")
 
       wr.wl(s"Local<ObjectTemplate> local_prototype = Nan::New(${cppClassName}_prototype);")
       wr.wl
-      wr.wl("Handle<Object> obj;")
+      wr.wl("Local<Object> obj;")
       wr.wl("if(!local_prototype.IsEmpty())").braced {
         wr.wl("obj = local_prototype->NewInstance();")
-        wr.wl(s"""$baseClassName *new_obj = new $baseClassName(object);""")
-        wr.wl("if(new_obj)").braced {
-          wr.wl("new_obj->Wrap(obj);")
-          wr.wl("new_obj->Ref();")
-        }
+        wr.wl(s"djinni::js::ObjectWrapper<$cppClassNameWithNamespace>::Wrap(object, obj);");
       }
-
       wr.wl("else").braced {
         val error = s""""$baseClassName::wrap: object template not valid""""
         wr.wl(s"Nan::ThrowError($error);")
       }
 
-      wr.wl("return obj;")
+      wr.wl("return scope.Escape(obj);")
     }
   }
 }
