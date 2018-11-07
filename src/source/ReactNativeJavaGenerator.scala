@@ -659,12 +659,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
 
     //Need for converter from hex string to NSData ?
     val needHexConverter = i.methods.filter(m => {
-      m.params.filter(p => {
-        p.ty.resolved.base match {
-          case MList | MSet | MMap | MOptional => isBinary(p.ty.resolved.args.head)
-          case _ => isBinary(p.ty.resolved)
-        }
-      }).length > 0
+      m.params.filter(p => isExprBinary(p.ty.resolved)).length > 0 || (m.ret.isDefined && isExprBinary(m.ret.get.resolved))
     }).length > 0
 
     val callbackInterface = isCallbackInterface(ident, i)
@@ -839,7 +834,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                         "finalJavaResult"
                       }
                       case MBinary => {
-                        w.wl(s"String finalJavaResult = new String($converting);")
+                        w.wl(s"String finalJavaResult = byteArrayToHexString($converting);")
                         "finalJavaResult"
                       }
                       case MOptional => getFinalResult(tm.args.head, converting)
@@ -963,10 +958,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
       refs.find(f.ty, addRCTHeader)
 
     //Need for converter from hex string to NSData ?
-    val needHexConverter = r.fields.filter(f => f.ty.resolved.base match {
-      case MList | MSet | MMap | MOptional => isBinary(f.ty.resolved.args.head)
-      case _ => isBinary(f.ty.resolved)
-    }).length > 0
+    val needHexConverter = r.fields.filter(f => isExprBinary(f.ty.resolved)).length > 0
 
     val javaName = if (r.ext.java) (ident.name + "_base") else ident.name
     val javaFinal = if (!r.ext.java && spec.javaUseFinalForRecord) "final " else ""
