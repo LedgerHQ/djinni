@@ -197,6 +197,21 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     }
   }
 
+  def generateIsNullMethod(wr : IndentWriter): Unit = {
+    wr.wl("RCT_REMAP_METHOD(isNull, isNull:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)").braced {
+      wr.wl("""if (!currentInstance[@"uid"] || !currentInstance[@"type"])""").braced {
+        wr.wl("resolve(@(YES));")
+        wr.wl("return;")
+      }
+      wr.wl("""[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+      wr.wl("""if ([self.objcImplementations objectForKey:currentInstance[@"uid"]])""").braced {
+        wr.wl("resolve(@(NO));")
+        wr.wl("return;")
+      }
+      wr.wl("resolve(@(YES));")
+    }
+  }
+
   def generateHexToDataMethod(wr : IndentWriter): Unit = {
     wr.wl("-(NSData *) hexStringToData: (NSString *)hexString ").braced {
       wr.wl("NSMutableData *data= [[NSMutableData alloc] init];")
@@ -521,6 +536,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         generateLogInstancesMethod(w)
         //Flush all objc intances from React Native Module's objcImplementations attribute
         generateFlushInstancesMethod(w)
+        generateIsNullMethod(w)
         //Generate hex converter
         if (needHexConverter) {
           generateHexToDataMethod(w)
@@ -782,6 +798,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       generateLogInstancesMethod(w)
       //Flush all objc intances from React Native Module's objcImplementations attribute
       generateFlushInstancesMethod(w)
+      generateIsNullMethod(w)
       //Generate hex converter
       if (needHexConverter) {
         generateHexToDataMethod(w)

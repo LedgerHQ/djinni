@@ -160,6 +160,24 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
     }
   }
 
+  def generateIsNullMethod(wr : IndentWriter): Unit = {
+    wr.wl("@ReactMethod")
+    wr.wl("public void isNull(ReadableMap currentInstance, Promise promise)").braced {
+      wr.wl("""String uid = currentInstance.getString("uid");""")
+      wr.wl("""if (uid.length() > 0)""").braced {
+        wr.wl("if (this.javaObjects.get(uid) == null)").braced {
+          wr.wl("promise.resolve(true);")
+          wr.wl("return;")
+        }
+        wr.wl("else").braced {
+          wr.wl("promise.resolve(false);")
+          wr.wl("return;")
+        }
+      }
+      wr.wl("promise.resolve(true);")
+    }
+  }
+
   def generateHexToDataMethod(wr : IndentWriter): Unit = {
     wr.wl("public static byte[] hexStringToByteArray(String hexString)").braced {
       wr.wl("int hexStringLength = hexString.length();")
@@ -944,6 +962,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
           generateLogInstancesMethod(w, javaInterface)
           //Flush all java intances from React Native Module's javaObjects attribute
           generateFlushInstancesMethod(w)
+          generateIsNullMethod(w)
           //Generate hex converter
           if (needHexConverter) {
             generateHexToDataMethod(w)
@@ -1016,6 +1035,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         generateLogInstancesMethod(w, javaInterface)
         //Flush all java intances from React Native Module's javaObjects attribute
         generateFlushInstancesMethod(w)
+        generateIsNullMethod(w)
         //Generate hex converter
         if (needHexConverter) {
           generateHexToDataMethod(w)
