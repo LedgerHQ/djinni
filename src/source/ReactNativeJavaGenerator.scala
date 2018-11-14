@@ -356,7 +356,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
         wr.wl(s"String $converted = byteArrayToHexString($converting);")
       }
       case MDate => {
-        wr.wl(s"""DateFormat ${converting}DateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");""")
+        wr.wl(s"""DateFormat ${converting}DateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");""")
         wr.wl(s"String $converted = ${converting}DateFormat.format($converting);")
       }
       case d: MDef =>
@@ -759,24 +759,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                     getConverter(p, index)
                   }
                 })
-              } else {
-                //Get returned value by callback
-                val errorParam = m.params(1)
-                //We suppose that errors are records with message and error fields
-                val errorParamField = idJava.field(errorParam.ident)
-                w.wl(s"if ($errorParamField != null && $errorParamField.getMessage().length() > 0)").braced {
-                  w.wl(s"this.promise.reject(${idJava.field(errorParam.ident)}.toString(), $errorParamField.getMessage());")
-                }
-                val resultParam = m.params(0)
-                val isParamInterface = isExprInterface(resultParam.ty.resolved)
-                val isParamRecord = isExprRecord(resultParam.ty.resolved)
-                val isParamBinary = isBinary(resultParam.ty.resolved)
-                toReactType(resultParam.ty.resolved, "converted_result", idJava.field(resultParam.ident), w)
-                w.wl
-                w.wl(s"this.promise.resolve(${if (isParamInterface || isParamRecord || isParamBinary) "converted_result" else idJava.field(resultParam.ident)});")
-              }
 
-              if (!callbackInterface) {
                 //Start calling Java method
                 if (m.static || m.ret.isDefined) {
                   w.w(s"${marshal.fieldType(m.ret.get)} javaResult = ")
@@ -801,7 +784,24 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 })
 
                 w.wl(");")
+
+              } else {
+                //Get returned value by callback
+                val errorParam = m.params(1)
+                //We suppose that errors are records with message and error fields
+                val errorParamField = idJava.field(errorParam.ident)
+                w.wl(s"if ($errorParamField != null && $errorParamField.getMessage().length() > 0)").braced {
+                  w.wl(s"this.promise.reject(${idJava.field(errorParam.ident)}.toString(), $errorParamField.getMessage());")
+                }
+                val resultParam = m.params(0)
+                val isParamInterface = isExprInterface(resultParam.ty.resolved)
+                val isParamRecord = isExprRecord(resultParam.ty.resolved)
+                val isParamBinary = isBinary(resultParam.ty.resolved)
+                toReactType(resultParam.ty.resolved, "converted_result", idJava.field(resultParam.ident), w)
+                w.wl
+                w.wl(s"this.promise.resolve(${if (isParamInterface || isParamRecord || isParamBinary) "converted_result" else idJava.field(resultParam.ident)});")
               }
+
 
               if(m.ret.isDefined) {
                 val javaReturnType = getReturnType(m.ret)
@@ -817,7 +817,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                 } else {
                   w.wl(s"WritableNativeMap result = new WritableNativeMap();")
 
-                  def getFinalResult(tm: MExpr, converting: String) : String = {
+                  def getFinalResult(tm: MExpr, converting: String, isOptional: Boolean = false) : String = {
                     val paramType = if(tm.args.length > 0) marshal.typename(tm.args.head) else ""
                     tm.base match {
                       case d: MDef =>
@@ -829,7 +829,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                           case _ => converting
                         }
                       case MDate => {
-                        w.wl("""DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");""")
+                        w.wl("""DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");""")
                         w.wl(s"String finalJavaResult = dateFormat.format($converting);")
                         "finalJavaResult"
                       }
@@ -837,7 +837,7 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                         w.wl(s"String finalJavaResult = byteArrayToHexString($converting);")
                         "finalJavaResult"
                       }
-                      case MOptional => getFinalResult(tm.args.head, converting)
+                      case MOptional => getFinalResult(tm.args.head, converting, true)
                       case MList | MSet => {
                         val pushMethodStr = pushMethod(tm.args.head)
                         w.wl(s"WritableNativeArray ${converting}_list = new WritableNativeArray();")
@@ -859,6 +859,15 @@ class ReactNativeJavaGenerator(spec: Spec, javaInterfaces : Seq[String]) extends
                           w.wl(s"${converting}_map.${putMethodStr}(${converting}_key, $convertedElem);")
                         }
                         s"${converting}_map"
+                      }
+                      case p : MPrimitive => {
+                        if (isOptional) {
+                          w.wl(s"if ($converting == null)").braced {
+                            w.wl(s"promise.resolve($converting);")
+                            w.wl("return;")
+                          }
+                        }
+                        converting
                       }
                       case _ => converting
                     }
