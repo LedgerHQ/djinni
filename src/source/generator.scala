@@ -279,14 +279,13 @@ package object generatorTools {
       if (spec.nodeOutFolder.isDefined) {
         if (!spec.skipGeneration) {
           createFolder("NodeJS", spec.nodeOutFolder.get)
-        }
-        new NodeJsGenerator(spec).generate(idl)
-      }
-      if (spec.nodeOutFolder.isDefined) {
-        if (!spec.skipGeneration) {
           createFolder("NodeJSCpp", spec.nodeOutFolder.get)
         }
-        new NodeJsCppGenerator(spec).generate(idl)
+        val helperFileDescriptor = new NodeJsHelperFilesDescriptor(spec)
+
+        new NodeJsHelperFilesGenerator(spec, helperFileDescriptor).generate(idl)
+        new NodeJsGenerator(spec, helperFileDescriptor).generate(idl)
+        new NodeJsCppGenerator(spec, helperFileDescriptor).generate(idl)
       }
       if (spec.reactNativeObjcOutFolder.isDefined) {
         if (!spec.skipGeneration) {

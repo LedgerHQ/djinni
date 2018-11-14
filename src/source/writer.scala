@@ -71,14 +71,21 @@ class IndentWriter(out: Writer, indent: String = "    ", startIndent: String = "
     for (i <- 0 until amount) decrease()
   }
 
-  def bracedEnd(end: String)(f: => Unit) {
+  def bracedEndNested(end: String, makeNested: Boolean) (f: => Unit): Unit = {
     if (startOfLine) {
       wl("{")
     } else {
       wl(" {")
     }
-    nested(f)
+    if (makeNested)
+      nested(f)
+    else
+      f
     wl(s"}$end")
+  }
+
+  def bracedEnd(end: String)(f: => Unit) {
+    bracedEndNested(end, true)(f)
   }
 
   def braced = bracedEnd("")(_)

@@ -6,7 +6,7 @@ import djinni.meta._
 
 import scala.collection.mutable
 
-class NodeJsGenerator(spec: Spec) extends Generator(spec) {
+class NodeJsGenerator(spec: Spec, helperFiles: NodeJsHelperFilesDescriptor) extends Generator(spec) {
 
   protected val marshal = new NodeJsMarshal(spec)
   protected val cppMarshal = new CppMarshal(spec)
@@ -31,7 +31,7 @@ class NodeJsGenerator(spec: Spec) extends Generator(spec) {
         val hppFileName = "#include \"" + idNode.ty(ident.name) + "." + spec.cppHeaderExt + "\""
         w.wl
         w.wl(hppFileName)
-        w.wl("#include \"NJSObjectWrapper.hpp\"")
+        w.wl("#include \""+ helperFiles.ObjectWrapperHeader + "\"")
         w.wl
         w.wl("using namespace v8;")
         w.wl("using namespace node;")

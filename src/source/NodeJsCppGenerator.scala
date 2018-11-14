@@ -9,7 +9,7 @@ import djinni.meta._
 
 import scala.collection.mutable.ListBuffer
 
-class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
+class NodeJsCppGenerator(spec: Spec, helperFiles: NodeJsHelperFilesDescriptor) extends NodeJsGenerator(spec, helperFiles) {
 
   override def generate(idl: Seq[TypeDecl]): Unit = {
 
@@ -107,7 +107,7 @@ class NodeJsCppGenerator(spec: Spec) extends NodeJsGenerator(spec) {
         w.wl
         val hppFileName = "#include \"" + idNode.ty(ident.name) + "Cpp." + spec.cppHeaderExt + "\""
         w.wl(hppFileName)
-        w.wl("#include \"NJSObjectWrapper.hpp\"")
+        w.wl("#include \"" + helperFiles.ObjectWrapperHeader + "\"")
         w.wl
         w.wl("using namespace v8;")
         w.wl("using namespace node;")
