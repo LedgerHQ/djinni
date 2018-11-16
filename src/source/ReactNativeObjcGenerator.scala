@@ -203,7 +203,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         wr.wl("resolve(@(YES));")
         wr.wl("return;")
       }
-      wr.wl("""[self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
       wr.wl("""if ([self.objcImplementations objectForKey:currentInstance[@"uid"]])""").braced {
         wr.wl("resolve(@(NO));")
         wr.wl("return;")
@@ -291,12 +290,12 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     wr.w("};")
   }
 
-  def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter): Unit = tm.base match {
-    case MOptional => toReactType(tm.args.head, converted, converting, wr)
+  def toReactType(tm: MExpr, converted: String, converting: String, wr: IndentWriter, isOptional: Boolean = false): Unit = tm.base match {
+    case MOptional => toReactType(tm.args.head, converted, converting, wr, true)
     case MList => {
       wr.wl(s"NSMutableArray *$converted = [[NSMutableArray alloc] init];")
       wr.wl(s"for (id ${converting}_elem in $converting)").braced {
-        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr)
+        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isOptional)
         wr.wl(s"[$converted addObject:${converted}_elem];")
       }
     }
@@ -304,7 +303,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       wr.wl(s"NSMutableSet *$converted = [[NSMutableSet alloc] init];")
       wr.wl(s"NSArray *arrayFromSet_$converting = [$converting allObjects];")
       wr.wl(s"for (id ${converting}_elem in arrayFromSet_$converting)").braced {
-        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr)
+        toReactType(tm.args.head, s"${converted}_elem", s"${converting}_elem", wr, isOptional)
         wr.wl(s"[$converted addObject:${converted}_elem];")
       }
     }
@@ -312,7 +311,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       wr.wl(s"NSMutableDictionary *$converted = [[NSMutableDictionary alloc] init];")
       wr.wl(s"for (id ${converting}_key in $converting)").braced {
         wr.wl(s"id ${converted}_value = [$converting objectForKey:${converted}_key];")
-        toReactType(tm.args.head, s"${converted}_value", s"${converting}_value", wr)
+        toReactType(tm.args.head, s"${converted}_value", s"${converting}_value", wr, isOptional)
         wr.wl(s"[$converted setObject:${converted}_value forKey:${converted}_key];")
       }
     }
@@ -326,8 +325,15 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           val paramTypeName = spec.reactNativeTypePrefix + objcParamType
           val moduleName = if (paramTypeName.indexOf(prefix) == 0) paramTypeName.substring(prefix.length) else paramTypeName
           wr.wl(s"""$paramTypeName *rctImpl_$converting = ($paramTypeName *)[self.bridge moduleForName:@"$moduleName"];""")
-          wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
+          if (isOptional) {
+            wr.wl(s"if ($converting)").braced {
+              wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
+            }
+          } else {
+            wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
+          }
           wr.wl(s"""NSDictionary *$converted = @{@"type" : @"$moduleName", @"uid" : ${converting}_uuid };""")
+
         }
         case _ =>
       }
