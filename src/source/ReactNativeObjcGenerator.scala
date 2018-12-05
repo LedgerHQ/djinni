@@ -66,6 +66,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       w.wl
       w.wl(s"@interface $baseModuleName : NSObject")
       w.wl("@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
+      w.wl("@property (nonatomic, strong) NSMutableDictionary *implementationsData;")
       w.wl("-(void)baseRelease:(NSDictionary *)currentInstance withResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;")
       w.wl("-(void)baseLogWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;")
       w.wl("-(void)baseFlushWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;")
@@ -90,6 +91,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
         w.wl("self = [super init];")
         w.wl("if(self)").braced {
           w.wl("self.objcImplementations = [[NSMutableDictionary alloc] init];")
+          w.wl("self.implementationsData = [[NSMutableDictionary alloc] init];")
         }
         w.wl("return self;")
       }
@@ -402,13 +404,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             wr.wl(s"if ($converting)").braced {
               wr.wl(s"NSArray *${converting}_array = [[NSArray alloc] initWithObjects:$converting, ${converting}_uuid, nil];")
               wr.wl(s"[rctImpl_$converting baseSetObject:${converting}_array];")
-              //wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
             }
           } else {
             wr.wl(s"NSArray *${converting}_array = [[NSArray alloc] initWithObjects:$converting, ${converting}_uuid, nil];")
             wr.wl(s"[rctImpl_$converting baseSetObject:${converting}_array];")
-
-            //wr.wl(s"[rctImpl_$converting.objcImplementations setObject:$converting forKey:${converting}_uuid];")
           }
           wr.wl(s"""NSDictionary *$converted = @{@"type" : @"$moduleName", @"uid" : ${converting}_uuid };""")
 
@@ -804,7 +803,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           w.wl(s"NSArray *resultArray = [[NSArray alloc] initWithObjects:objcResult, uuid, nil];")
           w.wl(s"[self baseSetObject:resultArray];")
 
-          //w.wl("[self.objcImplementations setObject:objcResult forKey:uuid];")
           val prefix = "RCT"
           val rctType = spec.reactNativeTypePrefix + objcInterface
           val moduleName = if (rctType.indexOf(prefix) == 0) rctType.substring(prefix.length) else rctType
@@ -856,9 +854,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
     writeObjcFile(fileName, origin, refs.header, w => {
       writeDoc(w, doc)
       w.wl(s"@interface $self : $baseModuleName <RCTBridgeModule>")
-      w.wl("@property (nonatomic, strong) NSMutableDictionary *objcImplementations;")
       if (hasOneFieldAsInterface) {
-        w.wl("@property (nonatomic, strong) NSMutableDictionary *implementationsData;")
         w.wl("-(void)mapImplementationsData:(NSDictionary *)currentInstance;")
       }
       w.wl("@end")
@@ -880,7 +876,6 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
       w.wl
       w.wl(s"@synthesize bridge = _bridge;")
 
-      //generateInitMethod(w, hasOneFieldAsInterface)
       //Avoid all warnings due to this method
       w.wl
       w.wl("+ (BOOL)requiresMainQueueSetup").braced {
