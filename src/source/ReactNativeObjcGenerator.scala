@@ -140,6 +140,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             w.wl("resolve(@(NO));")
             w.wl("return;")
           }
+            w.wl("else").braced {
+              w.wl("resolve(@(YES));")
+              w.wl("return;")
+            }
         }
       }
       w.wl
