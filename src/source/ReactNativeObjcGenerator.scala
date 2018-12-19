@@ -140,10 +140,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
             w.wl("resolve(@(NO));")
             w.wl("return;")
           }
-            w.wl("else").braced {
-              w.wl("resolve(@(YES));")
-              w.wl("return;")
-            }
+          w.wl("else").braced {
+            w.wl("resolve(@(YES));")
+            w.wl("return;")
+          }
         }
       }
       w.wl
@@ -236,7 +236,8 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           }
         }
         case _ => {
-          val paramType = marshal.paramType(p.ty)
+          //Fix LL-555
+          val paramType = marshal.paramType(p.ty).replaceFirst("nullable", "nonnull")
           val findIntType = """int\d+_t""".r
           findIntType.findFirstIn(paramType) match {
             case Some(_) => Some(identity, s"(int)$localIdentity")
