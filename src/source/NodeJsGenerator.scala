@@ -7,11 +7,6 @@ import djinni.meta._
 import scala.collection.mutable
 
 class NodeJsGenerator(spec: Spec) extends Generator(spec) {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-  override def generateEnum(origin: String, ident: Ident, doc: Doc, e: Enum): Unit = ???
->>>>>>> rebase
 
   protected val marshal = new NodeJsMarshal(spec)
   protected val cppMarshal = new CppMarshal(spec)
