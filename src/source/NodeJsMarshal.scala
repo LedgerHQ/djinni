@@ -402,38 +402,6 @@ class NodeJsMarshal(spec: Spec) extends CppMarshal(spec) {
       val cast = s"auto $converted = Nan::New<$nodeType>($converting)"
       if (toCheck) s"$cast.ToLocalChecked();" else s"$cast;"
     }
-
-    /*def getDefault(tm: MExpr): String = tm.base match {
-      case p: MPrimitive => "0"
-      case MString => "\"\""
-      case MList =>
-        val cppTemplType = super.paramType(tm.args(0), true)
-        s"std::vector<$cppTemplType>(0)"
-      case MBinary => s"std::vector<uint8_t>(0)"
-      case MOptional => {getDefault(tm.args(0))}
-      case d: MDef =>
-        val cppType = super.paramType(tm, true)
-        d.body match {
-          case e: Enum => s"$cppType(0)"
-          case r: Record =>
-            var result = s"${idCpp.ty(d.name)}("
-            for (f <- r.fields) {
-              result = s"$result${getDefault(f.ty.resolved)}"
-              if(f != r.fields.last) {
-                result = s"$result,"
-              }
-            }
-            result = s"$result)"
-            result
-          case i: Interface => "nullptr"
-        }
-      case e: MExtern => e.defType match {
-          case DInterface => "nullptr"
-          case _ => "0"
-      }
-      case _ => "0"
-    }*/
-
     def base(m: Meta): IndentWriter = m match {
       case p: MPrimitive => wr.wl(simpleCheckedCast(p.nodeJSName, false))
       case MString => wr.wl(simpleCheckedCast("String"))

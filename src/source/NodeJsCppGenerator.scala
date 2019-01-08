@@ -221,33 +221,6 @@ class NodeJsCppGenerator(spec: Spec, helperFiles: NodeJsHelperFilesDescriptor) e
       wr.wl("return info.GetReturnValue().Set(Nan::New<Boolean>(isNull));")
     }
   }
-  def createWrapMethod(ident: Ident, i: Interface, wr: writer.IndentWriter): Unit = {
-    val baseClassName = marshal.typename(ident, i)
-    val cppClassName = cppMarshal.typename(ident, i)
-    val cppClassNameWithNamespace = spec.cppNamespace + "::" + cppClassName
-    val cpp_shared_ptr = "std::shared_ptr<" + cppClassNameWithNamespace + ">"
-    wr.wl
-    wr.wl(s"Nan::Persistent<ObjectTemplate> $baseClassName::${cppClassName}_prototype;")
-    wr.wl
-    wr.w(s"Local<Object> $baseClassName::wrap(const $cpp_shared_ptr &object)").braced {
-
-      wr.wl("Nan::EscapableHandleScope scope;")
-
-      wr.wl(s"Local<ObjectTemplate> local_prototype = Nan::New(${cppClassName}_prototype);")
-      wr.wl
-      wr.wl("Local<Object> obj;")
-      wr.wl("if(!local_prototype.IsEmpty())").braced {
-        wr.wl("obj = local_prototype->NewInstance();")
-        wr.wl(s"djinni::js::ObjectWrapper<$cppClassNameWithNamespace>::Wrap(object, obj);");
-      }
-      wr.wl("else").braced {
-        val error = s""""$baseClassName::wrap: object template not valid""""
-        wr.wl(s"Nan::ThrowError($error);")
-      }
-
-      wr.wl("return scope.Escape(obj);")
-    }
-  }
 }
 
 
