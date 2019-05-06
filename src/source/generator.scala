@@ -35,6 +35,7 @@ package object generatorTools {
                    javaIdentStyle: JavaIdentStyle,
                    javaCppException: Option[String],
                    javaAnnotation: Option[String],
+                   javaGenerateInterfaces: Boolean,
                    javaNullableAnnotation: Option[String],
                    javaNonnullAnnotation: Option[String],
                    javaImplementAndroidOsParcelable: Boolean,
@@ -77,6 +78,8 @@ package object generatorTools {
                    objcppNamespace: String,
                    objcBaseLibIncludePrefix: String,
                    objcSwiftBridgingHeaderWriter: Option[Writer],
+                   objcSwiftBridgingHeaderName: Option[String],
+                   objcClosedEnums: Boolean,
                    outFileListWriter: Option[Writer],
                    skipGeneration: Boolean,
                    yamlOutFolder: Option[File],
@@ -257,7 +260,8 @@ package object generatorTools {
         new ObjcppGenerator(spec).generate(idl)
       }
       if (spec.objcSwiftBridgingHeaderWriter.isDefined) {
-        SwiftBridgingHeaderGenerator.writeAutogenerationWarning(spec.objcSwiftBridgingHeaderWriter.get)
+        SwiftBridgingHeaderGenerator.writeAutogenerationWarning(spec.objcSwiftBridgingHeaderName.get, spec.objcSwiftBridgingHeaderWriter.get)
+        SwiftBridgingHeaderGenerator.writeBridgingVars(spec.objcSwiftBridgingHeaderName.get, spec.objcSwiftBridgingHeaderWriter.get)
         new SwiftBridgingHeaderGenerator(spec).generate(idl)
       }
       if (spec.nodeOutFolder.isDefined) {
@@ -302,9 +306,12 @@ package object generatorTools {
   case class DeclRef(decl: String, namespace: Option[String]) extends SymbolReference
 }
 
+object Generator {
+  val writtenFiles = mutable.HashMap[String,String]()
+}
+
 abstract class Generator(spec: Spec)
 {
-  protected val writtenFiles = mutable.HashMap[String,String]()
 
   protected def createFile(folder: File, fileName: String, makeWriter: OutputStreamWriter => IndentWriter, f: IndentWriter => Unit): Unit = {
     if (spec.outFileListWriter.isDefined) {
@@ -316,7 +323,7 @@ abstract class Generator(spec: Spec)
 
     val file = new File(folder, fileName)
     val cp = file.getCanonicalPath
-    writtenFiles.put(cp.toLowerCase, cp) match {
+    Generator.writtenFiles.put(cp.toLowerCase, cp) match {
       case Some(existing) =>
         if (existing == cp) {
           throw GenerateException("Refusing to write \"" + file.getPath + "\"; we already wrote a file to that path.")

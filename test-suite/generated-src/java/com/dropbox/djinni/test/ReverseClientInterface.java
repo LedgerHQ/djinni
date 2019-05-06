@@ -7,20 +7,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
-public abstract class ReverseClientInterface {
+public interface ReverseClientInterface {
     @Nonnull
-    public abstract String returnStr();
+    public String returnStr();
 
     @Nonnull
-    public abstract String methTakingInterface(@CheckForNull ReverseClientInterface i);
+    public String methTakingInterface(@CheckForNull ReverseClientInterface i);
 
     @Nonnull
-    public abstract String methTakingOptionalInterface(@CheckForNull ReverseClientInterface i);
+    public String methTakingOptionalInterface(@CheckForNull ReverseClientInterface i);
 
     @CheckForNull
-    public static native ReverseClientInterface create();
+    public static ReverseClientInterface create()
+    {
+        return CppProxy.create();
+    }
 
-    private static final class CppProxy extends ReverseClientInterface
+    static final class CppProxy implements ReverseClientInterface
     {
         private final long nativeRef;
         private final AtomicBoolean destroyed = new AtomicBoolean(false);
@@ -32,14 +35,14 @@ public abstract class ReverseClientInterface {
         }
 
         private native void nativeDestroy(long nativeRef);
-        public void destroy()
+        public void _djinni_private_destroy()
         {
             boolean destroyed = this.destroyed.getAndSet(true);
             if (!destroyed) nativeDestroy(this.nativeRef);
         }
         protected void finalize() throws java.lang.Throwable
         {
-            destroy();
+            _djinni_private_destroy();
             super.finalize();
         }
 
@@ -66,5 +69,8 @@ public abstract class ReverseClientInterface {
             return native_methTakingOptionalInterface(this.nativeRef, i);
         }
         private native String native_methTakingOptionalInterface(long _nativeRef, ReverseClientInterface i);
+
+        @CheckForNull
+        public static native ReverseClientInterface create();
     }
 }

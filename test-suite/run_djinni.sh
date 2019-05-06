@@ -66,6 +66,8 @@ fi
 "$base_dir/../src/run-assume-built" \
     --java-out "$temp_out_relative/java" \
     --java-package $java_package \
+    --java-generate-interfaces true \
+    --java-implement-android-os-parcelable true \
     --java-nullable-annotation "javax.annotation.CheckForNull" \
     --java-nonnull-annotation "javax.annotation.Nonnull" \
     --java-use-final-for-record false \
@@ -95,6 +97,7 @@ fi
 "$base_dir/../src/run-assume-built" \
     --java-out "$temp_out_relative/java" \
     --java-package $java_package \
+    --java-generate-interfaces true \
     --java-nullable-annotation "javax.annotation.CheckForNull" \
     --java-nonnull-annotation "javax.annotation.Nonnull" \
     --java-use-final-for-record false \
@@ -133,6 +136,7 @@ cp "$base_dir/djinni/yaml-test.djinni" "$temp_out/yaml"
 "$base_dir/../src/run-assume-built" \
     --java-out "$temp_out_relative/java" \
     --java-package $java_package \
+    --java-generate-interfaces true \
     --ident-java-field mFooBar \
     \
     --cpp-out "$temp_out_relative/cpp" \
