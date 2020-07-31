@@ -236,8 +236,7 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
           }
         }
         case _ => {
-          //Fix LL-555
-          val paramType = marshal.paramType(p.ty).replaceFirst("nullable", "nonnull")
+          val paramType = marshal.paramType(p.ty)
           val findIntType = """int\d+_t""".r
           findIntType.findFirstIn(paramType) match {
             case Some(_) => Some(identity, s"(int)$localIdentity")
