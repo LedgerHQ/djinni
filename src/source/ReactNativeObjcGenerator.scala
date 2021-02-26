@@ -717,7 +717,10 @@ class ReactNativeObjcGenerator(spec: Spec, objcInterfaces : Seq[String]) extends
                 w.wl("return;")
               }
 
-              w.wl(s"""${objcInterface} *currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+              w.wl(s"""${objcInterface} *currentInstanceObj = nil;""")
+              w.wl(s"""@synchronized(self)""").braced {
+                w.wl(s"""currentInstanceObj = [self.objcImplementations objectForKey:currentInstance[@"uid"]];""")
+              }
               w.wl("if (!currentInstanceObj)").braced {
                 w.wl(s"""NSString *error = [NSString stringWithFormat:@"Error while calling ${objcInterface}::${idObjc.method(m.ident)}, instance of uid %@ not found", currentInstance[@"uid"]];""")
                 w.wl(s"""reject(@"impl_call_error", error, nil);""")
